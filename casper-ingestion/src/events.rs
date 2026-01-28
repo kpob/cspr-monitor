@@ -33,7 +33,7 @@ pub async fn event_stream() -> Result<impl Stream<Item = Result<Event, Error>>, 
     let client = reqwest::Client::new();
     let sse_url = std::env::var("LIVENET_EVENT_ADDRESS").expect("LIVENET_EVENT_ADDRESS not set");
     let res = client.get(sse_url).send().await?;
-
+    println!("Response: {:#?}", res);
     let es = res.bytes_stream().eventsource().map_err(Error::from);
     Ok(es)
 }
