@@ -5,11 +5,10 @@ edition = "2024"
 
 [dependencies]
 casper-common = { path = "../casper-common" }
-anyhow = "1.0.100"
-futures = "0.3.31"
-futures-util = "0.3.31"
-reqwest = { version = "0.13.1", features = ["json", "stream"] }
-serde = "1.0.228"
-thiserror = "2.0.18"
-tokio = { version = "1.49.0", features = ["full"] }
-eventsource-stream = "0.2.2"
+anyhow = { workspace = true }
+eventsource-stream = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
