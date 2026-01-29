@@ -1,41 +1,42 @@
+use anyhow::Result;
+use casper_common::{BLOCK_ADDED, TRANSACTION_ACCEPTED, TRANSACTION_PROCESSED};
 use eventsource_stream::{Event, Eventsource};
 use futures::Stream;
 use futures_util::TryStreamExt;
 
-use crate::Error;
-
-const TRANSACTION_ACCEPTED: &str = "TransactionAccepted";
-const TRANSACTION_PROCESSED: &str = "TransactionProcessed";
-const BLOCK_ADDED: &str = "BlockAdded";
-
-#[derive(Debug, PartialEq)]
-pub enum EventType {
-    Noise,
-    Relevant(&'static str),
-}
-
-impl From<&Event> for EventType {
-    fn from(event: &Event) -> Self {
-        if event.data.starts_with("{\"TransactionAccepted\"") {
-            return EventType::Relevant(TRANSACTION_ACCEPTED);
-        }
-        if event.data.starts_with("{\"TransactionProcessed\"") {
-            return EventType::Relevant(TRANSACTION_PROCESSED);
-        }
-        if event.data.starts_with("{\"BlockAdded\"") {
-            return EventType::Relevant(BLOCK_ADDED);
-        }
-        EventType::Noise
-    }
-}
-
-pub async fn event_stream() -> Result<impl Stream<Item = Result<Event, Error>>, Error> {
+pub async fn event_stream() -> Result<impl Stream<Item = Result<Event, anyhow::Error>>> {
     let client = reqwest::Client::new();
     let sse_url = std::env::var("LIVENET_EVENT_ADDRESS").expect("LIVENET_EVENT_ADDRESS not set");
     let res = client.get(sse_url).send().await?;
     println!("Response: {:#?}", res);
-    let es = res.bytes_stream().eventsource().map_err(Error::from);
+    let es = res
+        .bytes_stream()
+        .eventsource()
+        .map_err(anyhow::Error::from);
     Ok(es)
+}
+
+#[derive(Debug, PartialEq)]
+pub enum EventImportance {
+    Noise,
+    Relevant(&'static str),
+}
+
+impl From<&Event> for EventImportance {
+    fn from(event: &Event) -> Self {
+        // strip the leading {"
+        let data = &event.data[2..];
+        if data.starts_with(TRANSACTION_ACCEPTED) {
+            return EventImportance::Relevant(TRANSACTION_ACCEPTED);
+        }
+        if data.starts_with(TRANSACTION_PROCESSED) {
+            return EventImportance::Relevant(TRANSACTION_PROCESSED);
+        }
+        if event.data.starts_with(BLOCK_ADDED) {
+            return EventImportance::Relevant(BLOCK_ADDED);
+        }
+        EventImportance::Noise
+    }
 }
 
 #[cfg(test)]
@@ -50,7 +51,7 @@ mod tests {
             id: "".into(),
             retry: None,
         };
-        assert!(EventType::from(&noise) == EventType::Noise);
+        assert!(EventImportance::from(&noise) == EventImportance::Noise);
     }
 
     #[test]
@@ -61,6 +62,6 @@ mod tests {
             id: "".into(),
             retry: None,
         };
-        assert!(EventType::from(&tx) == EventType::Relevant(TRANSACTION_PROCESSED));
+        assert!(EventImportance::from(&tx) == EventImportance::Relevant(TRANSACTION_PROCESSED));
     }
 }

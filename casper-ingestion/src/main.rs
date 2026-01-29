@@ -1,30 +1,23 @@
-use eventsource_stream::EventStreamError;
+use anyhow::Result;
+use casper_common::{Database, PostgresDB};
 use futures::StreamExt;
-use std::fmt::Debug;
 
-use crate::{
-    db::{DB, PostgresDB},
-    events::EventType,
-};
+use crate::events::EventImportance;
 
-mod db;
 mod events;
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    let mut db = PostgresDB::default();
-    db.connect().await?;
-
-    println!("Connected to PostgreSQL!");
+async fn main() -> Result<()> {
+    let db = PostgresDB::new().await?;
 
     let mut es = events::event_stream().await?;
     while let Some(event) = es.next().await {
         let event = event?;
 
-        match EventType::from(&event) {
-            EventType::Noise => continue,
-            EventType::Relevant(e) => {
-                db.insert_event(e, &event).await?;
+        match EventImportance::from(&event) {
+            EventImportance::Noise => continue,
+            EventImportance::Relevant(e) => {
+                db.insert_event(e, &event.data).await?;
             }
         }
 
@@ -32,16 +25,4 @@ async fn main() -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Failed to connect to PostgreSQL")]
-    PostgresError(#[from] sqlx::Error),
-    #[error("Failed to serialize event data")]
-    SerdeJsonError(#[from] serde_json::Error),
-    #[error("Failed to fetch event data")]
-    ConnectionError(#[from] reqwest::Error),
-    #[error("Failed to parse event")]
-    EventSourceError(#[from] EventStreamError<reqwest::Error>),
 }
