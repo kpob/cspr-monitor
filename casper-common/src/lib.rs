@@ -5,7 +5,7 @@ pub const TRANSACTION_ACCEPTED: &str = "TransactionAccepted";
 pub const TRANSACTION_PROCESSED: &str = "TransactionProcessed";
 pub const BLOCK_ADDED: &str = "BlockAdded";
 
-#[derive(Debug, PartialEq)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq)]
 pub struct Event {
     pub id: i64,
     pub payload: serde_json::Value,
@@ -46,13 +46,11 @@ impl Database for PostgresDB {
     }
 
     async fn get_events(&self, event_type: &str) -> Result<Vec<Event>> {
-        let events = sqlx::query_as!(
-            Event,
-            "SELECT id, payload FROM raw_events WHERE event_type = $1 LIMIT 100",
-            event_type
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let events: Vec<Event> =
+            sqlx::query_as("SELECT id, payload FROM raw_events WHERE event_type = $1 LIMIT 100")
+                .bind(event_type)
+                .fetch_all(&self.pool)
+                .await?;
 
         Ok(events)
     }
