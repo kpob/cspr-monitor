@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 casper-common = { path = "../casper-common" }
+dotenv = { workspace = true }
 anyhow = { workspace = true }
 eventsource-stream = { workspace = true }
 futures = { workspace = true }

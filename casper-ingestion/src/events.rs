@@ -32,7 +32,7 @@ impl From<&Event> for EventImportance {
         if data.starts_with(TRANSACTION_PROCESSED) {
             return EventImportance::Relevant(TRANSACTION_PROCESSED);
         }
-        if event.data.starts_with(BLOCK_ADDED) {
+        if data.starts_with(BLOCK_ADDED) {
             return EventImportance::Relevant(BLOCK_ADDED);
         }
         EventImportance::Noise
