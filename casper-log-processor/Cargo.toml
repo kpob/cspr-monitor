@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 casper-common = { path = "../casper-common" }
+casper-types = { workspace = true }
 anyhow = { workspace = true }
 dotenv = { workspace = true }
 serde = { workspace = true }

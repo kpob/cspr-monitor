@@ -5,6 +5,7 @@ members = ["casper-common", "casper-ingestion", "casper-log-processor"]
 [workspace.dependencies]
 async-trait = "0.1.89"
 anyhow = "1.0.100"
+chrono = "0.4"
 dotenv = "0.15"
 eventsource-stream = "0.2.2"
 futures = "0.3.31"
@@ -17,6 +18,8 @@ sqlx = { version = "0.8.6", features = [
     "postgres",
     "uuid",
     "json",
+    "chrono",
 ] }
 thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["full"] }
+casper-types = { version = "6.1.0", features = ["json-schema", "std"] }

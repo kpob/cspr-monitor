@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
         match EventImportance::from(&event) {
             EventImportance::Noise => continue,
             EventImportance::Relevant(ty) => {
-                db.insert_event(&event.id, ty, &event.data).await?;
+                db.insert_raw_event(&event.id, ty, &event.data).await?;
             }
         }
     }
