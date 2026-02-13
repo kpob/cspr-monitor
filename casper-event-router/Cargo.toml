@@ -1,19 +1,24 @@
 [package]
-name = "casper-common"
+name = "casper-event-router"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "casper-event-router"
+path = "src/main.rs"
+
 [dependencies]
+casper-common = { path = "../casper-common" }
+casper-types = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
+dashmap = { workspace = true }
+dotenv = { workspace = true }
+futures = { workspace = true }
 rdkafka = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { workspace = true }
-thiserror = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-[dev-dependencies]
-tokio = { workspace = true }
