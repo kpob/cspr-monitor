@@ -1,86 +1,56 @@
 use anyhow::Result;
-use casper_common::{AppEvent, EnrichedTransaction, TransactionLifecycle};
+use casper_common::{APPS_CONTRACTS, AppEvent, EnrichedTransaction, TransactionLifecycle};
 use chrono::Utc;
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 
 use super::AppIdentifier;
 
+#[derive(Debug, Deserialize)]
+struct ExchangeConfig {
+    exchanges: HashMap<String, String>,
+}
+
 /// Identifies transactions from/to known exchange wallets
+#[derive(Debug, Default)]
 pub struct ExchangeWalletIdentifier {
     exchange_addresses: HashMap<String, String>,
 }
 
 impl ExchangeWalletIdentifier {
     pub fn new() -> Self {
-        let mut exchange_addresses = HashMap::new();
-
-        // Load from environment if available
-        if let Ok(addresses) = std::env::var("EXCHANGE_ADDRESSES") {
-            for addr in addresses.split(',') {
-                let parts: Vec<&str> = addr.split('=').collect();
-                if parts.len() == 2 {
-                    exchange_addresses.insert(
-                        parts[0].trim().to_string(),
-                        parts[1].trim().to_string(),
-                    );
-                }
-            }
-        }
-
-        // Add default known exchanges (from casper-delta-filter)
-        if exchange_addresses.is_empty() {
-            exchange_addresses.insert(
-                "011c74ebfcc1b19bc3e578bec3ecfa2d484f2a00d7e9e8152c4c70f519f6a89f6a".to_string(),
-                "Crypto.com".to_string(),
-            );
-            exchange_addresses.insert(
-                "020396133b3bbbfcf7d1961390f9449e2de5813523180376df361cb31a1ca965b576".to_string(),
-                "Crypto.com 2".to_string(),
-            );
-            exchange_addresses.insert(
-                "013beea64514ca478b9c2f6c43089ef9f1d0de0e803893a40cc34d75509ec9e2d4".to_string(),
-                "Bybit".to_string(),
-            );
-            exchange_addresses.insert(
-                "016470ae57b0a3ad5a679d2e0422909bfb9ded445e20cbe6b4c9806f844c94d401".to_string(),
-                "MEXC".to_string(),
-            );
-            exchange_addresses.insert(
-                "0202d219ef1f971118e33eacbad3d01c66cd07abc59d269e28253189dab15232479d".to_string(),
-                "KuCoin Cold 2".to_string(),
-            );
-            exchange_addresses.insert(
-                "0202ed20f3a93b5386bc41b6945722b2bd4250c48f5fa0632adf546e2f3ff6f4ddee".to_string(),
-                "KuCoin".to_string(),
-            );
-            exchange_addresses.insert(
-                "01b92e36567350dd7b339d709bfe341df6fda853e85315418f1bb3ddd414d9f5be".to_string(),
-                "Huobi".to_string(),
-            );
-            exchange_addresses.insert(
-                "02029d865f743f9a67c82c84d443cbd8187bc4a08ca7b4c985f0caca1a4ee98b1f4c".to_string(),
-                "Coinlist".to_string(),
-            );
-            exchange_addresses.insert(
-                "02024c5e3ba7b1da49cda950319aec914cd3c720fbec3dcf25aa4add631e28f70aa9".to_string(),
-                "CA".to_string(),
-            );
-            exchange_addresses.insert(
-                "0202d39fac363e1d8f0101edde806863668eb87d21a591f00b724ef83d371c1fc696".to_string(),
-                "Make".to_string(),
-            );
-            exchange_addresses.insert(
-                "01a0d23e084a95cdee9c2fb226d54033d645873a7c7c9739de2158725c7dfe672f".to_string(),
-                "Uphold".to_string(),
-            );
-        }
-
+        let exchange_addresses = Self::load_exchanges();
         tracing::info!(
             "Exchange wallet identifier initialized with {} exchanges",
             exchange_addresses.len()
         );
 
         Self { exchange_addresses }
+    }
+
+    fn load_exchanges() -> HashMap<String, String> {
+        let config_path = std::env::var("EXCHANGE_CONFIG_PATH")
+            .unwrap_or_else(|_| "casper-event-router/config/exchanges.json".to_string());
+
+        if let Ok(exchanges) = Self::load_from_file(&config_path) {
+            tracing::info!("Loaded {} exchanges from file: {}", exchanges.len(), config_path);
+            return exchanges;
+        }
+
+        HashMap::new() // Return empty if no config found
+    }
+
+    fn load_from_file(path: &str) -> Result<HashMap<String, String>> {
+        let path = Path::new(path);
+        if !path.exists() {
+            return Err(anyhow::anyhow!("Config file not found: {}", path.display()));
+        }
+
+        let content = fs::read_to_string(path)?;
+        let config: ExchangeConfig = serde_json::from_str(&content)?;
+        Ok(config.exchanges)
     }
 
     fn identify_exchange(&self, sender: &str) -> Option<&String> {
@@ -94,7 +64,7 @@ impl AppIdentifier for ExchangeWalletIdentifier {
     }
 
     fn topic(&self) -> &'static str {
-        "apps.exchanges"
+        APPS_CONTRACTS
     }
 
     fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>> {
@@ -140,8 +110,106 @@ impl AppIdentifier for ExchangeWalletIdentifier {
     }
 }
 
-impl Default for ExchangeWalletIdentifier {
-    fn default() -> Self {
-        Self::new()
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use casper_common::EnrichedTransaction;
+    use chrono::Utc;
+
+    fn write_temp(filename: &str, content: &str) -> String {
+        let path = std::env::temp_dir().join(filename);
+        std::fs::write(&path, content).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    fn make_tx(tx_hash: &str, sender: &str, raw_accepted: serde_json::Value) -> EnrichedTransaction {
+        EnrichedTransaction {
+            tx_hash: tx_hash.to_string(),
+            sender: sender.to_string(),
+            accepted_at: Utc::now(),
+            processed_at: Utc::now(),
+            status: "success".to_string(),
+            raw_accepted,
+            raw_processed: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn load_from_file_parses_valid_json() {
+        let path = write_temp(
+            "test_exchanges_valid.json",
+            r#"{"exchanges":{"addr123":"Binance"}}"#,
+        );
+        let result = ExchangeWalletIdentifier::load_from_file(&path).unwrap();
+        assert_eq!(result.get("addr123").map(String::as_str), Some("Binance"));
+    }
+
+    #[test]
+    fn load_from_file_returns_err_for_missing_file() {
+        let result = ExchangeWalletIdentifier::load_from_file("/nonexistent/exchanges.json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_from_file_returns_err_for_invalid_json() {
+        let path = write_temp("test_exchanges_invalid.json", "not json");
+        let result = ExchangeWalletIdentifier::load_from_file(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn identify_matches_known_exchange_sender() {
+        let identifier = ExchangeWalletIdentifier {
+            exchange_addresses: [("addr123".to_string(), "Binance".to_string())]
+                .into_iter()
+                .collect(),
+        };
+
+        let event = identifier
+            .identify(&make_tx("tx1", "addr123", serde_json::json!({})))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(event.app_type, "exchange_activity");
+        assert_eq!(event.app_data["exchange"], "Binance");
+        assert_eq!(event.app_data["wallet_address"], "addr123");
+    }
+
+    #[test]
+    fn identify_returns_none_for_unknown_sender() {
+        let identifier = ExchangeWalletIdentifier {
+            exchange_addresses: HashMap::new(),
+        };
+
+        assert!(identifier
+            .identify(&make_tx("tx1", "unknown", serde_json::json!({})))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn identify_includes_amount_when_present() {
+        let identifier = ExchangeWalletIdentifier {
+            exchange_addresses: [("addr123".to_string(), "Binance".to_string())]
+                .into_iter()
+                .collect(),
+        };
+
+        let raw_accepted = serde_json::json!({
+            "TransactionAccepted": {
+                "Version1": {
+                    "payload": {
+                        "fields": { "amount": "500000000" }
+                    }
+                }
+            }
+        });
+
+        let event = identifier
+            .identify(&make_tx("tx1", "addr123", raw_accepted))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(event.app_data["amount"], "500000000");
     }
 }
