@@ -27,7 +27,8 @@ async fn main() -> Result<()> {
 
                 // Publish to Kafka (event stream)
                 // Don't fail if Kafka is unavailable - fallback to DB-only mode
-                if let Err(e) = kafka.publish(RAW_CHAIN_EVENTS, &event.id, &event.data).await {
+                let key = format!("{}-{}", ty, event.id);
+                if let Err(e) = kafka.publish(RAW_CHAIN_EVENTS, &key, &event.data).await {
                     tracing::error!("Failed to publish to Kafka: {}", e);
                 } else {
                     tracing::debug!("Published event {} to Kafka topic '{}'", event.id, RAW_CHAIN_EVENTS);

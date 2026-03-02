@@ -1,5 +1,8 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
+
+use crate::KafkaMessage;
 
 // Event type constants
 pub const TRANSACTION_ACCEPTED: &str = "TransactionAccepted";
@@ -15,20 +18,28 @@ pub struct RawEvent {
     pub received_at: DateTime<Utc>,
 }
 
-/// Transaction with both accepted and processed data
-#[derive(sqlx::FromRow, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AcceptedTx {
-    pub tx_hash: String,
-    pub accepted_at: DateTime<Utc>,
-    pub processed_at: DateTime<Utc>,
-    pub status: String,
-    pub sender: String,
-    pub raw_accepted: serde_json::Value,
-    pub raw_processed: serde_json::Value,
+impl TryFrom<KafkaMessage> for RawEvent {
+    type Error = anyhow::Error;
+
+    fn try_from(message: KafkaMessage) -> Result<Self, Self::Error> {
+        let payload = serde_json::from_str::<serde_json::Value>(&message.payload)
+            .context("Failed to parse Kafka message payload as JSON")?;
+        let (event_type, id) = if let Some((ty, id)) = message.key.split_once('-') {
+            (ty.to_string(), id.parse().context("Failed to parse event ID from Kafka message key")?)
+        } else {
+            anyhow::bail!("Kafka message key is not in expected format 'EventType-EventID'");
+        };
+        Ok(Self {
+            id,
+            event_type,
+            payload,
+            received_at: Utc::now(),
+        })
+    }
 }
 
 /// Enriched transaction with correlated lifecycle events
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(sqlx::FromRow, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EnrichedTransaction {
     pub tx_hash: String,
     pub accepted_at: DateTime<Utc>,
@@ -37,20 +48,6 @@ pub struct EnrichedTransaction {
     pub status: String,
     pub raw_accepted: serde_json::Value,
     pub raw_processed: serde_json::Value,
-}
-
-impl From<AcceptedTx> for EnrichedTransaction {
-    fn from(tx: AcceptedTx) -> Self {
-        Self {
-            tx_hash: tx.tx_hash,
-            accepted_at: tx.accepted_at,
-            processed_at: tx.processed_at,
-            sender: tx.sender,
-            status: tx.status,
-            raw_accepted: tx.raw_accepted,
-            raw_processed: tx.raw_processed,
-        }
-    }
 }
 
 /// App-specific event with metadata

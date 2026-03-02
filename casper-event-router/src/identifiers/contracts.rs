@@ -24,8 +24,9 @@ pub struct ContractPatternIdentifier {
 
 impl ContractPatternIdentifier {
     pub fn new() -> Self {
-        let contracts = Self::load_contracts();
-
+        // let contracts = Self::load_contracts();
+        let mut contracts = HashMap::new(); // Start with empty, can be loaded from file or env
+        contracts.insert("269575762e3faf7dcddcfba88ba2a31aceee0db93f98a286e940cb72b3d043de".to_string(), "Erc20".to_string()); // Example entry, replace with real data or loading logic
         tracing::info!(
             "Contract pattern identifier initialized with {} contracts",
             contracts.len()

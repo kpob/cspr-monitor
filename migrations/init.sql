@@ -28,12 +28,3 @@ CREATE TABLE tx_lifecycle (
     status TEXT,
     raw_processed JSONB
 );
-
-CREATE TABLE contract_usage (
-    tx_hash TEXT PRIMARY KEY,
-    contract TEXT,
-    method TEXT,
-    caller TEXT,
-    block_number BIGINT,
-    timestamp TIMESTAMPTZ
-);

@@ -16,7 +16,7 @@ pub struct KafkaProducer {
 impl KafkaProducer {
     /// Create a new Kafka producer from environment variables
     pub async fn new() -> Result<Self> {
-        let bootstrap_servers = std::env::var("KAFKA_BOOTSTRAP")
+        let bootstrap_servers = std::env::var("KAFKA_BROKERS")
             .unwrap_or_else(|_| "localhost:9092".to_string());
 
         let producer: FutureProducer = ClientConfig::new()
@@ -79,7 +79,7 @@ impl KafkaConsumer {
     /// * `group_id` - The consumer group ID
     /// * `topics` - List of topics to subscribe to
     pub async fn new(group_id: &str, topics: Vec<&str>) -> Result<Self> {
-        let bootstrap_servers = std::env::var("KAFKA_BOOTSTRAP")
+        let bootstrap_servers = std::env::var("KAFKA_BROKERS")
             .unwrap_or_else(|_| "localhost:9092".to_string());
 
         let consumer: StreamConsumer = ClientConfig::new()

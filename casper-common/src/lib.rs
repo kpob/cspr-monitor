@@ -8,7 +8,7 @@ mod tracing;
 pub use database::{Database, PostgresDB};
 pub use kafka::{KafkaConsumer, KafkaMessage, KafkaProducer};
 pub use models::{
-    AcceptedTx, AppEvent, EnrichedTransaction, RawEvent, TransactionLifecycle,
+    AppEvent, EnrichedTransaction, RawEvent, TransactionLifecycle,
     BLOCK_ADDED, TRANSACTION_ACCEPTED, TRANSACTION_PROCESSED,
 };
 pub use topics::{

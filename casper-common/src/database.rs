@@ -1,7 +1,7 @@
 use anyhow::Result;
 use sqlx::{PgPool, Pool, Postgres};
 
-use crate::models::{AcceptedTx, RawEvent};
+use crate::models::{EnrichedTransaction, RawEvent};
 
 const INSERT_ACCEPTED_TX: &str = "INSERT INTO tx_lifecycle (
     tx_hash,
@@ -57,7 +57,7 @@ AND event_type != 'BlockAdded'
 ORDER BY id
 LIMIT $1";
 
-const GET_ACCEPTED_TXS: &str =
+const GET_ENRICHED_TRANSACTIONS: &str =
     "SELECT tx_hash, accepted_at, processed_at, status, sender, raw_accepted, raw_processed
 FROM tx_lifecycle
 WHERE accepted_at IS NOT NULL
@@ -94,7 +94,7 @@ pub trait Database {
     ) -> Result<()>;
     async fn get_unprocessed_events(&self, limit: i64) -> Result<Vec<RawEvent>>;
     async fn mark_processed(&self, id: i64) -> Result<()>;
-    async fn get_accepted_txs(&self, limit: i64) -> Result<Vec<AcceptedTx>>;
+    async fn get_enriched_transactions(&self, limit: i64) -> Result<Vec<EnrichedTransaction>>;
 }
 
 #[derive(Clone)]
@@ -106,8 +106,6 @@ impl PostgresDB {
     pub async fn new() -> Result<Self> {
         let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
         let pool = PgPool::connect(&db_url).await?;
-        println!("Connected to PostgreSQL!");
-
         Ok(Self { pool })
     }
 }
@@ -215,8 +213,8 @@ impl Database for PostgresDB {
         Ok(())
     }
 
-    async fn get_accepted_txs(&self, limit: i64) -> Result<Vec<AcceptedTx>> {
-        let txs: Vec<AcceptedTx> = sqlx::query_as(GET_ACCEPTED_TXS)
+    async fn get_enriched_transactions(&self, limit: i64) -> Result<Vec<EnrichedTransaction>> {
+        let txs: Vec<EnrichedTransaction> = sqlx::query_as(GET_ENRICHED_TRANSACTIONS)
             .bind(limit)
             .fetch_all(&self.pool)
             .await?;

@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use casper_common::{
-    Database, KafkaConsumer, KafkaProducer, PostgresDB, RawEvent, ENRICHED_CHAIN_EVENTS,
-    RAW_CHAIN_EVENTS,
+    Database, ENRICHED_CHAIN_EVENTS, KafkaConsumer, KafkaMessage, KafkaProducer, PostgresDB, RAW_CHAIN_EVENTS, RawEvent
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -109,16 +108,14 @@ async fn main() -> Result<()> {
 }
 
 async fn process_event(
-    message: casper_common::KafkaMessage,
+    message: KafkaMessage,
     db: &PostgresDB,
     kafka_producer: &KafkaProducer,
     correlator: &TransactionCorrelator,
     identifiers: &IdentifierRegistry,
 ) -> Result<()> {
     // Deserialize the raw event
-    let raw_event: RawEvent = message
-        .deserialize()
-        .context("Failed to deserialize raw event")?;
+    let raw_event = RawEvent::try_from(message)?;
 
     tracing::debug!(
         "Processing event: id={}, type={}",
