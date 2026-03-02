@@ -11,29 +11,42 @@ just install-deps          # installs librdkafka via brew/apt/etc.
 # Build all crates
 cargo build
 
-# Run individual services
+# Run individual services locally (requires .env and local librdkafka)
 just run-ingestion          # casper-ingestion
 just run-router             # casper-event-router
-cargo run --bin casper-log-processor
-cargo run --bin casper-delta-filter
 
 # Tests
 cargo test                  # all unit tests
-just ingest-test            # creates test DB schema + runs cargo test
 
-# Infrastructure (Kafka + Kafka UI via Docker)
-just up                     # start containers
-just down                   # stop containers
-just logs                   # follow logs
+# Infrastructure (Docker — runs nctl, Kafka, PostgreSQL, ingestion, event-router)
+just docker-up              # start all containers
+just docker-down            # stop containers
+just docker-logs            # follow all logs
+just docker-rebuild         # rebuild image(s) and restart services
+just docker-restart         # full down → up cycle
+just docker-ps              # show running containers and health status
+just docker-status          # pipeline status: services + consumer lag + DB row counts
 
-# Database setup
-just init-db                # applies db/create.sql to ingest_dev
+# Service-specific logs
+just docker-logs-ingestion
+just docker-logs-router
+just docker-logs-kafka
+just docker-logs-deployer
+just docker-logs-simulator
 
-# Kafka topic management
-just init-topics            # create raw.chain_events (12p), enriched.chain_events (12p), signals.arbitrage (3p)
-just topics                 # list topics
-just consume topic=raw.chain_events   # tail a topic from the beginning
-just consume-latest topic=enriched.chain_events
+# Kafka topic management (via Docker)
+just kafka-init-topics      # create raw.chain_events (12p), enriched.chain_events (12p), signals.arbitrage (3p)
+just kafka-topics           # list topics
+just kafka-consume topic=raw.chain_events       # tail a topic from the beginning
+just kafka-consume-latest topic=enriched.chain_events
+just kafka-topic-create name=<topic> partitions=6
+just kafka-topic-delete name=<topic>
+just kafka-groups           # list consumer groups
+just kafka-group-describe group=event-router
+
+# Monitoring
+just docker-lag             # consumer group lag for event-router
+just docker-db-stats        # row counts for raw_events and tx_lifecycle
 ```
 
 ## Environment Variables
@@ -44,16 +57,20 @@ Loaded from `.env` (via `dotenv`). Key variables:
 |---|---|---|
 | `LIVENET_EVENT_ADDRESS` | casper-ingestion | Casper node SSE endpoint |
 | `DATABASE_URL` | all services with DB | PostgreSQL connection string |
-| `KAFKA_BOOTSTRAP` | all services with Kafka | defaults to `localhost:9092` |
-| `CONTRACT_CONFIG_PATH` | casper-event-router | defaults to `resources/known_contracts.json` |
-| `EXCHANGE_CONFIG_PATH` | casper-event-router | defaults to `resources/exchanges.json` |
+| `KAFKA_BROKERS` | all services with Kafka | defaults to `localhost:9092` |
+| `CONTRACT_CONFIG_PATH` | casper-event-router | defaults to `config/known_contracts.json` |
+| `EXCHANGE_CONFIG_PATH` | casper-event-router | defaults to `config/exchanges.json` |
+| `DEPLOYED_CONTRACTS_JSON_PATH` | contract-deployer, event-router | path to JSON written by deployer and read by router |
 
 ## Architecture Overview
 
-This is a **Casper blockchain event monitoring pipeline** implemented as a Rust Cargo workspace. Events flow through four stages:
+This is a **Casper blockchain event monitoring pipeline** implemented as a Rust Cargo workspace. The full Docker stack spins up a local Casper network (`nctl`), deploys test contracts, and runs the monitoring pipeline end-to-end.
 
 ```
-Casper Node (SSE)
+nctl (local Casper network)
+      │
+      ▼
+contract-deployer         → deploys WASM contracts, writes DEPLOYED_CONTRACTS_JSON_PATH
       │
       ▼
 casper-ingestion          → PostgreSQL raw_events table
@@ -67,6 +84,8 @@ casper-event-router       → correlates TransactionAccepted + TransactionProces
       ▼
 casper-delta-filter       (example downstream consumer)
   (or any custom app using casper-event-consumer library)
+
+simulator                 → sends test transactions against deployed contracts
 ```
 
 ### Crates
@@ -81,7 +100,9 @@ casper-delta-filter       (example downstream consumer)
 
 - **`casper-delta-filter`** — example downstream app using `casper-event-consumer`. Filters `apps.contracts` for the specific Casper Delta Market contract hash.
 
-- **`casper-log-processor`** — legacy DB-polling processor. Reads unprocessed events from PostgreSQL, parses them using `casper-types`, and populates `tx_lifecycle`. Predates the Kafka-based router; runs in 100-event batches with 10-second idle sleep.
+- **`odra-contracts`** — two binaries for the local dev environment:
+  - `deploy` (Docker: `contract-deployer`) — deploys ERC-20 and Ownable WASM contracts to nctl, writes contract addresses to `DEPLOYED_CONTRACTS_JSON_PATH` as JSON for the event-router to load.
+  - `simulator` — sends test transactions against the deployed contracts using multiple keypairs.
 
 ### App Identifiers (casper-event-router)
 
@@ -91,10 +112,10 @@ The `IdentifierRegistry` holds `Box<dyn AppIdentifier>` objects. Each identifier
 3. Has a `topic()` that determines where the `AppEvent` is published
 
 Current identifiers:
-- `ContractPatternIdentifier` — matches transactions targeting contract hashes listed in `resources/known_contracts.json` (format: `{"contracts": {"name": "hash"}}`)
-- `ExchangeWalletIdentifier` — matches transactions from sender addresses in `resources/exchanges.json` (format: `{"exchanges": {"address": "name"}}`)
+- `ContractPatternIdentifier` — matches transactions targeting contract hashes. Loaded from `config/known_contracts.json` (or `CONTRACT_CONFIG_PATH`), supplemented by `DEPLOYED_CONTRACTS_JSON_PATH` at startup and by the `CONTRACT_PATTERNS` env var. Format: `{"contracts": {"Name": "hash"}}`
+- `ExchangeWalletIdentifier` — matches transactions from sender addresses. Loaded from `config/exchanges.json` (or `EXCHANGE_CONFIG_PATH`), supplemented by the `EXCHANGE_ADDRESSES` env var (`address=Name,...`). Format: `{"exchanges": {"address": "name"}}`
 
-To add a new identifier, implement `AppIdentifier` in `casper-event-router/src/identifiers/` and register it in `IdentifierRegistry::new()`.
+Config files live in `casper-event-router/config/`. To add a new identifier, implement `AppIdentifier` in `casper-event-router/src/identifiers/` and register it in `IdentifierRegistry::new()`.
 
 ### Kafka Message Key Format
 
@@ -103,7 +124,7 @@ To add a new identifier, implement `AppIdentifier` in `casper-event-router/src/i
 ### Database Schema
 
 Two main tables in PostgreSQL:
-- **`raw_events`** (`id`, `event_type`, `payload` jsonb, `received_at`, `processed` bool) — written by `casper-ingestion`, read by `casper-log-processor`
-- **`tx_lifecycle`** (`tx_hash` PK, `accepted_at`, `sender`, `raw_accepted` jsonb, `processed_at`, `status`, `raw_processed` jsonb) — written by both `casper-event-router` and `casper-log-processor` using `ON CONFLICT (tx_hash) DO UPDATE`
+- **`raw_events`** (`id`, `event_type`, `payload` jsonb, `received_at`, `processed` bool) — written by `casper-ingestion`
+- **`tx_lifecycle`** (`tx_hash` PK, `accepted_at`, `sender`, `raw_accepted` jsonb, `processed_at`, `status`, `raw_processed` jsonb) — written by `casper-event-router` using `ON CONFLICT (tx_hash) DO UPDATE`
 
-Schema is in `db/create.sql` (applied via `just init-db`).
+Schema is in `migrations/init.sql` (auto-applied by PostgreSQL Docker container on first start).

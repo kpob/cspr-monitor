@@ -1917,7 +1917,8 @@ dependencies = [
 [[package]]
 name = "odra"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91cf598dd0318ef3dc320ac95c528663921a39e33e10b57d6021d4d01616c4cc"
 dependencies = [
  "odra-casper-wasm-env",
  "odra-core",
@@ -1928,7 +1929,8 @@ dependencies = [
 [[package]]
 name = "odra-build"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe312fbe2c12ee9a66e1416370768336679acbde733e3d9c66214af664f15995"
 dependencies = [
  "serde",
  "serde_json",
@@ -1937,7 +1939,8 @@ dependencies = [
 [[package]]
 name = "odra-casper-livenet-env"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b4ba52152027c37f7d10eea6781d2a1674ecacd654ecd09525cb77a4897c66f"
 dependencies = [
  "anyhow",
  "blake2 0.10.6",
@@ -1953,7 +1956,8 @@ dependencies = [
 [[package]]
 name = "odra-casper-rpc-client"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fa91903113963c05d7ca5783ffc2d4e4e7f47bbd8c4708213e695b972a01a47"
 dependencies = [
  "base16",
  "bytes",
@@ -1976,7 +1980,8 @@ dependencies = [
 [[package]]
 name = "odra-casper-wasm-env"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b227d2f2afb9b648001404f53fe58c1efef6d0dc797ecb521f20bca12ce75e32"
 dependencies = [
  "casper-contract",
  "ink_allocator",
@@ -1997,7 +2002,8 @@ dependencies = [
 [[package]]
 name = "odra-core"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69de2585912eea5c7c664a81c4d1f65cb5f0da16afaa240bc660797fbcea4ada"
 dependencies = [
  "anyhow",
  "casper-event-standard",
@@ -2012,7 +2018,8 @@ dependencies = [
 [[package]]
 name = "odra-macros"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1addbc59b2d8bb005babffbdf96e21cbf9b92f157d6fd3614ae4cc7cef33165"
 dependencies = [
  "convert_case 0.6.0",
  "derive-try-from-ref",
@@ -2026,7 +2033,8 @@ dependencies = [
 [[package]]
 name = "odra-modules"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be0e70a830cd548ee66889dc339179852117fc5093c65f26dbc14510396944b1"
 dependencies = [
  "base64 0.22.1",
  "odra",
@@ -2036,7 +2044,8 @@ dependencies = [
 [[package]]
 name = "odra-schema"
 version = "2.5.0"
-source = "git+https://github.com/odradev/odra.git?branch=feature%2Flivenet-logs#6e30fe022ccc5c19259a19880cad53ed5d0935fb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaf1ea705e4133d77d30c86a2cd491a0837d8ea3ff27cb7f092452a1212b14bf"
 dependencies = [
  "casper-contract-schema",
  "casper-types",
