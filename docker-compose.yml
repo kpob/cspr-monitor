@@ -103,7 +103,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "dev"]
+      test: ["CMD", "pg_isready", "-U", "ingest_dev"]
       interval: 5s
       retries: 10
       start_period: 5s
@@ -124,14 +124,19 @@ services:
   event-router:
     <<: *app
     command: event-router
+    volumes:
+      - casper-data:/casper-data
     environment:
       DATABASE_URL: postgres://dev:dev@postgres:5432/ingest_dev
       KAFKA_BROKERS: kafka:9092
+      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
     depends_on:
       kafka:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      contract-deployer:
+        condition: service_completed_successfully
 
   contract-deployer:
     <<: *app
@@ -150,7 +155,7 @@ services:
       ODRA_CASPER_LIVENET_EVENTS_URL: http://nctl:18101/events
       ODRA_CASPER_LIVENET_SECRET_KEY_PATH: /keys/secret_key.pem
       DATABASE_URL: postgres://dev:dev@postgres:5432/ingest_dev
-      DEPLOYED_ADDRESSES_PATH: /casper-data/deployed_addresses.txt
+      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
     depends_on:
       nctl:
         condition: service_healthy
@@ -171,7 +176,7 @@ services:
       ODRA_CASPER_LIVENET_KEY_1: /keys/secret_key_1.pem
       ODRA_CASPER_LIVENET_KEY_2: /keys/secret_key_2.pem
       ODRA_CASPER_LIVENET_KEY_3: /keys/secret_key_3.pem
-      DEPLOYED_ADDRESSES_PATH: /casper-data/deployed_addresses.txt
+      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
     depends_on:
       contract-deployer:
         condition: service_completed_successfully

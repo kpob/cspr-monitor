@@ -1991,6 +1991,7 @@ dependencies = [
  "odra",
  "odra-casper-livenet-env",
  "odra-modules",
+ "serde_json",
 ]
 
 [[package]]

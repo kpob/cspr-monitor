@@ -26,34 +26,44 @@ docker-rebuild:
 docker-build-clean:
   docker compose build --no-cache
 
+# Nuclear option: stop, remove, and rebuild everything
+docker-rebuild-clean:
+  docker compose down --volumes --remove-orphans
+  docker compose build --no-cache
+  docker compose up -d
+
 # Restart all services (full down → up cycle)
 docker-restart:
   docker compose down
   docker compose up -d
 
+# Show running containers and their health status
+docker-ps:
+  docker compose ps
+
 # Follow logs for all services
 docker-logs:
   docker compose logs -f
 
-# Follow logs for a specific service: ingestion, event-router, kafka, postgres, nctl
+# Follow logs for the ingestion service
 docker-logs-ingestion:
   docker compose logs -f ingestion
 
+# Follow logs for the event-router service
 docker-logs-router:
   docker compose logs -f event-router
 
+# Follow logs for the Kafka broker
 docker-logs-kafka:
   docker compose logs -f kafka
 
+# Follow logs for the deploy service
 docker-logs-deployer:
   docker compose logs contract-deployer
 
+# Follow logs for the simulator service
 docker-logs-simulator:
   docker compose logs simulator
-
-# Show running containers and their health status
-docker-ps:
-  docker compose ps
 
 # --- Status / monitoring ---
 

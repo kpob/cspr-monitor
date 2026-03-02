@@ -24,9 +24,20 @@ pub struct ContractPatternIdentifier {
 
 impl ContractPatternIdentifier {
     pub fn new() -> Self {
-        // let contracts = Self::load_contracts();
-        let mut contracts = HashMap::new(); // Start with empty, can be loaded from file or env
-        contracts.insert("269575762e3faf7dcddcfba88ba2a31aceee0db93f98a286e940cb72b3d043de".to_string(), "Erc20".to_string()); // Example entry, replace with real data or loading logic
+        let mut contracts = Self::load_contracts();
+
+        // Also load dynamically deployed contracts (written by contract-deployer at runtime)
+        if let Ok(path) = std::env::var("DEPLOYED_CONTRACTS_JSON_PATH") {
+            match Self::load_from_file(&path) {
+                Ok(deployed) => {
+                    let count = deployed.len();
+                    contracts.extend(deployed);
+                    tracing::info!("Loaded {} deployed contracts from {}", count, path);
+                }
+                Err(e) => tracing::warn!("Could not load deployed contracts from {}: {}", path, e),
+            }
+        }
+
         tracing::info!(
             "Contract pattern identifier initialized with {} contracts",
             contracts.len()
@@ -60,8 +71,17 @@ impl ContractPatternIdentifier {
         let content = fs::read_to_string(path)?;
         let config: ContractConfig = serde_json::from_str(&content)?;
 
-        // Reverse the mapping: name->hash becomes hash->name for efficient lookups
-        Ok(config.contracts.into_iter().map(|(name, hash)| (hash, name)).collect())
+        // Reverse the mapping: name->hash becomes hash->name for efficient lookups.
+        // Normalize hash: strip address prefixes (e.g. "hash-<hex>") so the key is plain hex,
+        // matching what appears in raw transaction payloads.
+        Ok(config.contracts.into_iter().map(|(name, hash)| {
+            let normalized = if hash.contains('-') {
+                hash.rsplit_once('-').map(|(_, h)| h.to_string()).unwrap_or(hash)
+            } else {
+                hash
+            };
+            (normalized, name)
+        }).collect())
     }
 
     fn extract_contract_hash(&self, tx: &EnrichedTransaction) -> Option<String> {

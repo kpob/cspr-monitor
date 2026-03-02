@@ -34,6 +34,9 @@ WORKDIR /app
 # Without it, find_wasm_file_path fails silently (no log output at all).
 COPY --from=builder /app/Cargo.lock /app/Cargo.lock
 
+# Static config files read at runtime by event-router
+COPY casper-event-router/config/ casper-event-router/config/
+
 # Rename binaries to match docker-compose command names
 COPY --from=builder /app/target/release/casper-ingestion /usr/local/bin/ingestion
 COPY --from=builder /app/target/release/casper-event-router /usr/local/bin/event-router

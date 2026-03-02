@@ -10,18 +10,23 @@ fn main() {
     let user_1 = env.get_account(1);
     let user_2 = env.get_account(2);
     let user_3 = env.get_account(3);
-    // Read deployed contract address from file.
-    // DEPLOYED_ADDRESSES_PATH allows Docker to read from a shared volume.
-    let path = std::env::var("DEPLOYED_ADDRESSES_PATH")
-        .unwrap_or_else(|_| "deployed_addresses.txt".to_string());
-    let file = std::fs::read_to_string(&path)
-        .expect("Failed to read deployed addresses");
-    let addresses = file.lines().map(|line| {
-        Address::from_str(line.split(':').nth(1).unwrap().trim()).expect("Failed to parse address")
-    }).collect::<Vec<Address>>();
+    // Read deployed contract addresses from the JSON file written by the deployer.
+    // DEPLOYED_CONTRACTS_JSON_PATH allows Docker services to share via a named volume.
+    let json_path = std::env::var("DEPLOYED_CONTRACTS_JSON_PATH")
+        .unwrap_or_else(|_| "deployed_contracts.json".to_string());
+    let json_str = std::fs::read_to_string(&json_path)
+        .expect("Failed to read deployed contracts JSON");
+    let json: serde_json::Value = serde_json::from_str(&json_str)
+        .expect("Failed to parse deployed contracts JSON");
+    let contracts = &json["contracts"];
 
-    let mut token = Erc20::load(&env, addresses[0]);
-    let mut ownable = Ownable::load(&env, addresses[1]);
+    let token_addr = Address::from_str(contracts["Token Contract"].as_str().unwrap())
+        .expect("Failed to parse token address");
+    let ownable_addr = Address::from_str(contracts["Ownable Contract"].as_str().unwrap())
+        .expect("Failed to parse ownable address");
+
+    let mut token = Erc20::load(&env, token_addr);
+    let mut ownable = Ownable::load(&env, ownable_addr);
 
     let owner = ownable.get_owner();
     loop {
