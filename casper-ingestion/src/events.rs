@@ -8,7 +8,7 @@ pub async fn event_stream() -> Result<impl Stream<Item = Result<Event, anyhow::E
     let client = reqwest::Client::new();
     let sse_url = std::env::var("LIVENET_EVENT_ADDRESS").expect("LIVENET_EVENT_ADDRESS not set");
     let res = client.get(sse_url).send().await?;
-    println!("Response: {:#?}", res);
+    tracing::info!("Connected to SSE endpoint, status: {}", res.status());
     let es = res
         .bytes_stream()
         .eventsource()

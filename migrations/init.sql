@@ -8,6 +8,9 @@ CREATE TABLE raw_events (
 ALTER TABLE raw_events
 ADD COLUMN processed BOOLEAN DEFAULT FALSE;
 
+ALTER TABLE raw_events
+ADD COLUMN kafka_published BOOLEAN DEFAULT FALSE;
+
 CREATE INDEX idx_raw_events_unprocessed
 ON raw_events (id)
 WHERE processed = FALSE;
