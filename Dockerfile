@@ -13,12 +13,14 @@ COPY casper-common/ casper-common/
 COPY casper-delta-filter/ casper-delta-filter/
 COPY casper-event-consumer/ casper-event-consumer/
 COPY casper-event-router/ casper-event-router/
+COPY casper-exchange-monitor/ casper-exchange-monitor/
 COPY casper-ingestion/ casper-ingestion/
 COPY casper-simulator/ casper-simulator/
 
 RUN cargo +nightly build --release \
     --bin casper-ingestion \
     --bin casper-event-router \
+    --bin casper-exchange-monitor \
     --bin simulator
 
 FROM debian:bookworm-slim
@@ -39,4 +41,5 @@ COPY casper-event-router/config/ casper-event-router/config/
 # Rename binaries to match docker-compose command names
 COPY --from=builder /app/target/release/casper-ingestion /usr/local/bin/ingestion
 COPY --from=builder /app/target/release/casper-event-router /usr/local/bin/event-router
+COPY --from=builder /app/target/release/casper-exchange-monitor /usr/local/bin/exchange-monitor
 COPY --from=builder /app/target/release/simulator /usr/local/bin/simulator

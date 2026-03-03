@@ -5,6 +5,7 @@ members = [
     "casper-delta-filter",
     "casper-event-consumer",
     "casper-event-router",
+    "casper-exchange-monitor",
     "casper-ingestion",
     "casper-simulator",
 ]

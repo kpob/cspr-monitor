@@ -63,13 +63,66 @@ impl ExchangeWalletIdentifier {
         // Normalize address: strip account prefixes (e.g. "account-hash-<hex>") so the key
         // is plain hex, matching what appears in EnrichedTransaction::sender.
         Ok(config.exchanges.into_iter().map(|(addr, name)| {
-            let normalized = if addr.contains('-') {
-                addr.rsplit_once('-').map(|(_, h)| h.to_string()).unwrap_or(addr)
-            } else {
-                addr
-            };
-            (normalized, name)
+            (normalize_address(&addr), name)
         }).collect())
+    }
+
+    fn build_event(
+        &self,
+        tx: &EnrichedTransaction,
+        exchange_name: &str,
+        direction: &str,
+        wallet_address: &str,
+        counterparty: &str,
+    ) -> AppEvent {
+        let mut app_data = serde_json::Map::new();
+        app_data.insert("exchange".to_string(), serde_json::json!(exchange_name));
+        app_data.insert("direction".to_string(), serde_json::json!(direction));
+        app_data.insert("wallet_address".to_string(), serde_json::json!(wallet_address));
+        app_data.insert("counterparty".to_string(), serde_json::json!(counterparty));
+
+        // Extract transfer amount: prefer parsed args (reliable for native transfers),
+        // fall back to raw_accepted for other transaction types.
+        let amount = tx.args
+            .as_ref()
+            .and_then(|a| a.get("amount"))
+            .cloned()
+            .or_else(|| {
+                tx.raw_accepted
+                    .get("TransactionAccepted")
+                    .and_then(|ta| ta.get("Version1"))
+                    .and_then(|v1| v1.get("payload"))
+                    .and_then(|p| p.get("fields"))
+                    .and_then(|f| f.get("amount"))
+                    .cloned()
+            });
+        if let Some(amount) = amount {
+            app_data.insert("amount".to_string(), amount);
+        }
+
+        AppEvent {
+            event_id: format!("exchange-{}-{}", tx.tx_hash, Utc::now().timestamp_millis()),
+            tx_hash: tx.tx_hash.clone(),
+            app_type: "exchange_activity".to_string(),
+            topic: self.topic().to_string(),
+            timestamp: Utc::now(),
+            lifecycle: TransactionLifecycle {
+                accepted_at: tx.accepted_at,
+                processed_at: tx.processed_at,
+                status: tx.status.clone(),
+                sender: tx.sender.clone(),
+            },
+            app_data: serde_json::Value::Object(app_data),
+        }
+    }
+}
+
+/// Strip any `<prefix>-<hex>` address format down to plain hex.
+fn normalize_address(addr: &str) -> String {
+    if addr.contains('-') {
+        addr.rsplit_once('-').map(|(_, h)| h.to_string()).unwrap_or_else(|| addr.to_string())
+    } else {
+        addr.to_string()
     }
 }
 
@@ -102,45 +155,34 @@ impl AppIdentifier for ExchangeWalletIdentifier {
     }
 
     fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>> {
-        // Check if sender is a known exchange
-        let exchange_name = match self.exchange_addresses.read().unwrap().get(&tx.sender).cloned() {
-            Some(name) => name,
-            None => return Ok(None),
-        };
+        let addresses = self.exchange_addresses.read().unwrap();
 
-        // Build app-specific data
-        let mut app_data = serde_json::Map::new();
-        app_data.insert("exchange".to_string(), serde_json::json!(exchange_name));
-        app_data.insert("wallet_address".to_string(), serde_json::json!(tx.sender));
-
-        // Try to extract amount/value if available
-        if let Some(amount) = tx.raw_accepted
-            .get("TransactionAccepted")
-            .and_then(|ta| ta.get("Version1"))
-            .and_then(|v1| v1.get("payload"))
-            .and_then(|p| p.get("fields"))
-            .and_then(|f| f.get("amount"))
-        {
-            app_data.insert("amount".to_string(), amount.clone());
+        // Outflow: the exchange is the sender
+        if let Some(exchange_name) = addresses.get(&tx.sender).cloned() {
+            drop(addresses);
+            let counterparty = tx.args
+                .as_ref()
+                .and_then(|a| a.get("target"))
+                .and_then(|v| v.as_str())
+                .map(normalize_address)
+                .unwrap_or_default();
+            return Ok(Some(self.build_event(tx, &exchange_name, "outflow", &tx.sender, &counterparty)));
         }
 
-        // Create the app event
-        let app_event = AppEvent {
-            event_id: format!("exchange-{}-{}", tx.tx_hash, Utc::now().timestamp_millis()),
-            tx_hash: tx.tx_hash.clone(),
-            app_type: "exchange_activity".to_string(),
-            topic: self.topic().to_string(),
-            timestamp: Utc::now(),
-            lifecycle: TransactionLifecycle {
-                accepted_at: tx.accepted_at,
-                processed_at: tx.processed_at,
-                status: tx.status.clone(),
-                sender: tx.sender.clone(),
-            },
-            app_data: serde_json::Value::Object(app_data),
-        };
+        // Inflow: the exchange is the recipient (native transfer target arg)
+        if let Some(target_raw) = tx.args
+            .as_ref()
+            .and_then(|a| a.get("target"))
+            .and_then(|v| v.as_str())
+        {
+            let target_norm = normalize_address(target_raw);
+            if let Some(exchange_name) = addresses.get(&target_norm).cloned() {
+                drop(addresses);
+                return Ok(Some(self.build_event(tx, &exchange_name, "inflow", &target_norm, &tx.sender)));
+            }
+        }
 
-        Ok(Some(app_event))
+        Ok(None)
     }
 }
 
@@ -169,6 +211,21 @@ mod tests {
             entry_point: None,
             args: None,
         }
+    }
+
+    fn make_tx_with_args(tx_hash: &str, sender: &str, target: &str, amount: &str) -> EnrichedTransaction {
+        let mut tx = make_tx(tx_hash, sender);
+        tx.args = Some(serde_json::json!({
+            "target": target,
+            "amount": amount,
+        }));
+        tx
+    }
+
+    #[test]
+    fn normalize_address_strips_prefix() {
+        assert_eq!(normalize_address("account-hash-abc123"), "abc123");
+        assert_eq!(normalize_address("abc123"), "abc123");
     }
 
     #[test]
@@ -205,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn identify_matches_known_exchange_sender() {
+    fn identify_outflow_matches_exchange_sender() {
         let identifier = ExchangeWalletIdentifier {
             exchange_addresses: RwLock::new(
                 [("addr123".to_string(), "Binance".to_string())]
@@ -215,25 +272,65 @@ mod tests {
             config_path: None,
         };
 
-        let event = identifier
-            .identify(&make_tx("tx1", "addr123"))
-            .unwrap()
-            .unwrap();
+        let tx = make_tx_with_args("tx1", "addr123", "account-hash-user999", "1000");
+        let event = identifier.identify(&tx).unwrap().unwrap();
 
         assert_eq!(event.app_type, "exchange_activity");
         assert_eq!(event.app_data["exchange"], "Binance");
+        assert_eq!(event.app_data["direction"], "outflow");
         assert_eq!(event.app_data["wallet_address"], "addr123");
+        assert_eq!(event.app_data["counterparty"], "user999");
+        assert_eq!(event.app_data["amount"], "1000");
     }
 
     #[test]
-    fn identify_returns_none_for_unknown_sender() {
+    fn identify_inflow_matches_exchange_recipient() {
+        let identifier = ExchangeWalletIdentifier {
+            exchange_addresses: RwLock::new(
+                [("addr123".to_string(), "Binance".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            config_path: None,
+        };
+
+        let tx = make_tx_with_args("tx2", "user999", "account-hash-addr123", "500");
+        let event = identifier.identify(&tx).unwrap().unwrap();
+
+        assert_eq!(event.app_data["direction"], "inflow");
+        assert_eq!(event.app_data["exchange"], "Binance");
+        assert_eq!(event.app_data["wallet_address"], "addr123");
+        assert_eq!(event.app_data["counterparty"], "user999");
+        assert_eq!(event.app_data["amount"], "500");
+    }
+
+    #[test]
+    fn identify_returns_none_for_unknown_sender_and_recipient() {
         let identifier = ExchangeWalletIdentifier {
             exchange_addresses: RwLock::new(HashMap::new()),
             config_path: None,
         };
 
         assert!(identifier
-            .identify(&make_tx("tx1", "unknown"))
+            .identify(&make_tx_with_args("tx1", "unknown", "account-hash-alsoUnknown", "100"))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn identify_returns_none_when_no_args() {
+        let identifier = ExchangeWalletIdentifier {
+            exchange_addresses: RwLock::new(
+                [("addr123".to_string(), "Binance".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            config_path: None,
+        };
+
+        // sender is unknown, no args → no match
+        assert!(identifier
+            .identify(&make_tx("tx1", "unknownSender"))
             .unwrap()
             .is_none());
     }

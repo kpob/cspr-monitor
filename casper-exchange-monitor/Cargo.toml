@@ -1,0 +1,16 @@
+[package]
+name = "casper-exchange-monitor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+casper-common = { path = "../casper-common" }
+casper-event-consumer = { path = "../casper-event-consumer" }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+dotenv = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

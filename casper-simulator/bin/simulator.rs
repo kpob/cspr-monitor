@@ -21,39 +21,65 @@ fn main() {
     write_deployed_contracts_json(&ownable, &token);
     write_exchanges_json(&env);
 
-    // Run simulation
-    let user_1 = env.get_account(1);
-    let user_2 = env.get_account(2);
+    // Account roles:
+    //   exchange_1 (account 1) = Exchange Alpha  — registered exchange
+    //   exchange_2 (account 2) = Exchange Beta   — registered exchange
+    //   user_3     (account 3) = Regular User    — not an exchange
+    //   user_4     (account 4) = Regular User 2  — not an exchange
+    let exchange_1 = env.get_account(1);
+    let exchange_2 = env.get_account(2);
     let user_3 = env.get_account(3);
+    let user_4 = env.get_account(4);
 
     loop {
-        env.set_caller(user_1);
-        env.transfer(user_2, U512::from(1_000_000_000_000u64))
-            .expect("Failed to transfer tokens to user 2");
+        // --- Native CSPR transfers ---
 
-        env.set_caller(user_2);
-        env.transfer(user_3, U512::from(500_000_000_000u64))
-            .expect("Failed to transfer tokens to user 3");
-
+        // user2user: user_3 → user_4 (100 CSPR)
         env.set_caller(user_3);
-        env.transfer(user_1, U512::from(250_000_000_000u64))
-            .expect("Failed to transfer tokens back to user 1");
+        env.transfer(user_4, U512::from(100_000_000_000u64))
+            .expect("user_3 -> user_4 transfer failed");
 
+        // user2user: user_4 → user_3 (200 CSPR)
+        env.set_caller(user_4);
+        env.transfer(user_3, U512::from(200_000_000_000u64))
+            .expect("user_4 -> user_3 transfer failed");
+
+        // user2exchange (inflow): user_3 → exchange_1 (1000 CSPR)
+        env.set_caller(user_3);
+        env.transfer(exchange_1, U512::from(1_000_000_000_000u64))
+            .expect("user_3 -> exchange_1 transfer failed");
+
+        // user2exchange (inflow): user_4 → exchange_2 (500 CSPR)
+        env.set_caller(user_4);
+        env.transfer(exchange_2, U512::from(500_000_000_000u64))
+            .expect("user_4 -> exchange_2 transfer failed");
+
+        // exchange2user (outflow): exchange_1 → user_4 (750 CSPR)
+        env.set_caller(exchange_1);
+        env.transfer(user_4, U512::from(750_000_000_000u64))
+            .expect("exchange_1 -> user_4 transfer failed");
+
+        // exchange2user (outflow): exchange_2 → user_3 (300 CSPR)
+        env.set_caller(exchange_2);
+        env.transfer(user_3, U512::from(300_000_000_000u64))
+            .expect("exchange_2 -> user_3 transfer failed");
+
+        // --- Contract interactions ---
+
+        // Ownable ownership cycling (generates apps.contracts events)
         env.set_caller(owner);
-        ownable.try_transfer_ownership(&user_1).expect("Failed to transfer ownership to user 1");
+        ownable.try_transfer_ownership(&exchange_1).expect("Failed to transfer ownership to exchange_1");
 
-        env.set_caller(user_1);
-        ownable.try_transfer_ownership(&user_2).expect("Failed to transfer ownership to user 2");
+        env.set_caller(exchange_1);
+        ownable.try_transfer_ownership(&exchange_2).expect("Failed to transfer ownership to exchange_2");
 
-        env.set_caller(user_2);
-        ownable.try_transfer_ownership(&user_3).expect("Failed to transfer ownership to user 3");
+        env.set_caller(exchange_2);
+        ownable.try_transfer_ownership(&owner).expect("Failed to transfer ownership back to owner");
 
-        env.set_caller(user_3);
-        ownable.try_transfer_ownership(&owner).expect("Failed to transfer ownership back to original owner");
-
-        env.set_caller(user_1);
-        token.try_mint(&user_2, &U256::from(1000)).expect("Failed to mint tokens");
-        token.try_burn(&user_2, &U256::from(1000)).expect("Failed to burn tokens");
+        // ERC-20 mint/burn (generates apps.contracts events)
+        env.set_caller(owner);
+        token.try_mint(&user_3, &U256::from(1000)).expect("Failed to mint tokens");
+        token.try_burn(&user_3, &U256::from(1000)).expect("Failed to burn tokens");
     }
 }
 
@@ -74,15 +100,14 @@ fn write_deployed_contracts_json(ownable: &dyn Addressable, token: &dyn Addressa
 }
 
 fn write_exchanges_json(env: &HostEnv) {
-    // Write simulator account addresses as exchange addresses so the event-router
-    // can tag their transactions with exchange_activity events.
+    // Write only accounts 1 & 2 as exchange addresses.
+    // Accounts 3 & 4 are regular users and must NOT appear here.
     // EXCHANGE_CONFIG_JSON_PATH is shared via the same Docker volume as DEPLOYED_CONTRACTS_JSON_PATH.
     if let Ok(exchange_path) = std::env::var("EXCHANGE_CONFIG_JSON_PATH") {
         let exchanges_json = serde_json::json!({
             "exchanges": {
-                env.get_account(1).to_string(): "Simulator User 1",
-                env.get_account(2).to_string(): "Simulator User 2",
-                env.get_account(3).to_string(): "Simulator User 3",
+                env.get_account(1).to_string(): "Exchange Alpha",
+                env.get_account(2).to_string(): "Exchange Beta",
             }
         });
         std::fs::write(&exchange_path, exchanges_json.to_string())

@@ -62,6 +62,7 @@ services:
         cp /home/casper/casper-nctl/assets/net-1/users/user-2/secret_key.pem /nctl-keys/secret_key_1.pem
         cp /home/casper/casper-nctl/assets/net-1/users/user-3/secret_key.pem /nctl-keys/secret_key_2.pem
         cp /home/casper/casper-nctl/assets/net-1/users/user-4/secret_key.pem /nctl-keys/secret_key_3.pem
+        cp /home/casper/casper-nctl/assets/net-1/users/user-5/secret_key.pem /nctl-keys/secret_key_4.pem
         echo "Keys ready."
 
         # Keep waiting on the nctl process
@@ -171,6 +172,7 @@ services:
       ODRA_CASPER_LIVENET_KEY_1: /keys/secret_key_1.pem
       ODRA_CASPER_LIVENET_KEY_2: /keys/secret_key_2.pem
       ODRA_CASPER_LIVENET_KEY_3: /keys/secret_key_3.pem
+      ODRA_CASPER_LIVENET_KEY_4: /keys/secret_key_4.pem
       DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
       EXCHANGE_CONFIG_JSON_PATH: /casper-data/exchanges.json
     depends_on:
@@ -178,6 +180,16 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+
+  exchange-monitor:
+    <<: *app
+    command: exchange-monitor
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      # EXCHANGE_FILTER: "Exchange Alpha"  # uncomment to monitor only one exchange
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
 
 volumes:
   kafka-data:
