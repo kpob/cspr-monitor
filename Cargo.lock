@@ -345,6 +345,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "casper-simulator"
+version = "0.1.0"
+dependencies = [
+ "odra",
+ "odra-casper-livenet-env",
+ "odra-modules",
+ "serde_json",
+]
+
+[[package]]
 name = "casper-types"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1987,16 +1997,6 @@ dependencies = [
  "ink_allocator",
  "lazy_static",
  "odra-core",
-]
-
-[[package]]
-name = "odra-contracts"
-version = "0.1.0"
-dependencies = [
- "odra",
- "odra-casper-livenet-env",
- "odra-modules",
- "serde_json",
 ]
 
 [[package]]

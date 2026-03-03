@@ -1,4 +1,4 @@
 /target
 .env
 .nctl/**
-odra-contracts/*.txt
+casper-simulator/*.txt

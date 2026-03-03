@@ -1,5 +1,5 @@
 [package]
-name = "odra-contracts"
+name = "casper-simulator"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,11 +8,6 @@ odra = "2.5.0"
 odra-modules = "2.5.0"
 odra-casper-livenet-env = "2.5.0"
 serde_json = "1"
-
-[[bin]]
-name = "deploy"
-path = "bin/deploy.rs"
-test = false
 
 [[bin]]
 name = "simulator"

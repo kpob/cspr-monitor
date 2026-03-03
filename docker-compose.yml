@@ -135,13 +135,10 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      contract-deployer:
-        condition: service_completed_successfully
 
-  contract-deployer:
+  simulator:
     <<: *app
-    command: contract-deployer
-    restart: "no"
+    command: simulator
     volumes:
       - ./wasm:/app/wasm:ro
       - nctl-keys:/keys:ro
@@ -154,32 +151,15 @@ services:
       ODRA_CASPER_LIVENET_CHAIN_NAME: casper-net-1
       ODRA_CASPER_LIVENET_EVENTS_URL: http://nctl:18101/events
       ODRA_CASPER_LIVENET_SECRET_KEY_PATH: /keys/secret_key.pem
-      DATABASE_URL: postgres://dev:dev@postgres:5432/ingest_dev
       DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
+      ODRA_CASPER_LIVENET_KEY_1: /keys/secret_key_1.pem
+      ODRA_CASPER_LIVENET_KEY_2: /keys/secret_key_2.pem
+      ODRA_CASPER_LIVENET_KEY_3: /keys/secret_key_3.pem
     depends_on:
       nctl:
         condition: service_healthy
       postgres:
         condition: service_healthy
-
-  simulator:
-    <<: *app
-    command: simulator
-    volumes:
-      - nctl-keys:/keys:ro
-      - casper-data:/casper-data
-    environment:
-      ODRA_CASPER_LIVENET_NODE_ADDRESS: http://nctl:11101
-      ODRA_CASPER_LIVENET_CHAIN_NAME: casper-net-1
-      ODRA_CASPER_LIVENET_EVENTS_URL: http://nctl:18101/events
-      ODRA_CASPER_LIVENET_SECRET_KEY_PATH: /keys/secret_key.pem
-      ODRA_CASPER_LIVENET_KEY_1: /keys/secret_key_1.pem
-      ODRA_CASPER_LIVENET_KEY_2: /keys/secret_key_2.pem
-      ODRA_CASPER_LIVENET_KEY_3: /keys/secret_key_3.pem
-      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
-    depends_on:
-      contract-deployer:
-        condition: service_completed_successfully
 
 volumes:
   kafka-data:

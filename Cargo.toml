@@ -6,7 +6,7 @@ members = [
     "casper-event-consumer",
     "casper-event-router",
     "casper-ingestion",
-    "odra-contracts",
+    "casper-simulator",
 ]
 
 [workspace.dependencies]

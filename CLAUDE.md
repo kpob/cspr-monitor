@@ -60,7 +60,7 @@ Loaded from `.env` (via `dotenv`). Key variables:
 | `KAFKA_BROKERS` | all services with Kafka | defaults to `localhost:9092` |
 | `CONTRACT_CONFIG_PATH` | casper-event-router | defaults to `config/known_contracts.json` |
 | `EXCHANGE_CONFIG_PATH` | casper-event-router | defaults to `config/exchanges.json` |
-| `DEPLOYED_CONTRACTS_JSON_PATH` | contract-deployer, event-router | path to JSON written by deployer and read by router |
+| `DEPLOYED_CONTRACTS_JSON_PATH` | casper-simulator, event-router | path to JSON written by simulator on startup and read by router |
 
 ## Architecture Overview
 
@@ -70,8 +70,8 @@ This is a **Casper blockchain event monitoring pipeline** implemented as a Rust 
 nctl (local Casper network)
       │
       ▼
-contract-deployer         → deploys WASM contracts, writes DEPLOYED_CONTRACTS_JSON_PATH
-      │
+casper-simulator          → deploys WASM contracts, writes DEPLOYED_CONTRACTS_JSON_PATH
+      │                   → runs infinite loop of test transactions (restarts = fresh redeploy)
       ▼
 casper-ingestion          → PostgreSQL raw_events table
       │                   → Kafka: raw.chain_events
@@ -85,7 +85,7 @@ casper-event-router       → correlates TransactionAccepted + TransactionProces
 casper-delta-filter       (example downstream consumer)
   (or any custom app using casper-event-consumer library)
 
-simulator                 → sends test transactions against deployed contracts
+casper-simulator          → (see above)
 ```
 
 ### Crates
@@ -100,9 +100,7 @@ simulator                 → sends test transactions against deployed contracts
 
 - **`casper-delta-filter`** — example downstream app using `casper-event-consumer`. Filters `apps.contracts` for the specific Casper Delta Market contract hash.
 
-- **`odra-contracts`** — two binaries for the local dev environment:
-  - `deploy` (Docker: `contract-deployer`) — deploys ERC-20 and Ownable WASM contracts to nctl, writes contract addresses to `DEPLOYED_CONTRACTS_JSON_PATH` as JSON for the event-router to load.
-  - `simulator` — sends test transactions against the deployed contracts using multiple keypairs.
+- **`casper-simulator`** — single binary for the local dev environment: deploys ERC-20 and Ownable WASM contracts to nctl, writes contract addresses to `DEPLOYED_CONTRACTS_JSON_PATH` as JSON for the event-router to load, then runs an infinite loop of test transactions using multiple keypairs. On crash, Docker restarts it which triggers a fresh redeploy.
 
 ### App Identifiers (casper-event-router)
 
