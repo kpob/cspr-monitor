@@ -14,12 +14,11 @@ COPY casper-delta-filter/ casper-delta-filter/
 COPY casper-event-consumer/ casper-event-consumer/
 COPY casper-event-router/ casper-event-router/
 COPY casper-ingestion/ casper-ingestion/
-COPY odra-contracts/ odra-contracts/
+COPY casper-simulator/ casper-simulator/
 
 RUN cargo +nightly build --release \
     --bin casper-ingestion \
     --bin casper-event-router \
-    --bin deploy \
     --bin simulator
 
 FROM debian:bookworm-slim
@@ -40,5 +39,4 @@ COPY casper-event-router/config/ casper-event-router/config/
 # Rename binaries to match docker-compose command names
 COPY --from=builder /app/target/release/casper-ingestion /usr/local/bin/ingestion
 COPY --from=builder /app/target/release/casper-event-router /usr/local/bin/event-router
-COPY --from=builder /app/target/release/deploy /usr/local/bin/contract-deployer
 COPY --from=builder /app/target/release/simulator /usr/local/bin/simulator
