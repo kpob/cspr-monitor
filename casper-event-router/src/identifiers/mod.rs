@@ -1,12 +1,10 @@
 use anyhow::Result;
-use async_trait::async_trait;
 use casper_common::{AppEvent, EnrichedTransaction};
 
 pub mod contracts;
 pub mod exchanges;
 
 /// Trait for identifying application patterns in transactions
-#[async_trait]
 pub trait AppIdentifier: Send + Sync {
     /// Name of this identifier
     fn name(&self) -> &'static str;
@@ -19,6 +17,11 @@ pub trait AppIdentifier: Send + Sync {
     /// Returns Some(AppEvent) if the transaction matches this app pattern
     /// Returns None if it doesn't match
     fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>>;
+
+    /// Reload configuration from the source (e.g. file on disk).
+    /// Called periodically so identifiers can pick up files written after startup.
+    /// Default implementation is a no-op.
+    fn reload(&self) {}
 }
 
 /// Registry of app identifiers
@@ -34,6 +37,13 @@ impl IdentifierRegistry {
                 Box::new(contracts::ContractPatternIdentifier::new()),
                 Box::new(exchanges::ExchangeWalletIdentifier::new()),
             ],
+        }
+    }
+
+    /// Reload all identifiers from their configuration sources
+    pub fn reload_all(&self) {
+        for identifier in &self.identifiers {
+            identifier.reload();
         }
     }
 

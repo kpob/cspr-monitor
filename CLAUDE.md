@@ -59,7 +59,7 @@ Loaded from `.env` (via `dotenv`). Key variables:
 | `DATABASE_URL` | all services with DB | PostgreSQL connection string |
 | `KAFKA_BROKERS` | all services with Kafka | defaults to `localhost:9092` |
 | `CONTRACT_CONFIG_PATH` | casper-event-router | defaults to `config/known_contracts.json` |
-| `EXCHANGE_CONFIG_PATH` | casper-event-router | defaults to `config/exchanges.json` |
+| `EXCHANGE_CONFIG_JSON_PATH` | casper-event-router | defaults to `config/exchanges.json` |
 | `DEPLOYED_CONTRACTS_JSON_PATH` | casper-simulator, event-router | path to JSON written by simulator on startup and read by router |
 
 ## Architecture Overview
@@ -111,7 +111,7 @@ The `IdentifierRegistry` holds `Box<dyn AppIdentifier>` objects. Each identifier
 
 Current identifiers:
 - `ContractPatternIdentifier` — matches transactions targeting contract hashes. Loaded from `config/known_contracts.json` (or `CONTRACT_CONFIG_PATH`), supplemented by `DEPLOYED_CONTRACTS_JSON_PATH` at startup and by the `CONTRACT_PATTERNS` env var. Format: `{"contracts": {"Name": "hash"}}`
-- `ExchangeWalletIdentifier` — matches transactions from sender addresses. Loaded from `config/exchanges.json` (or `EXCHANGE_CONFIG_PATH`), supplemented by the `EXCHANGE_ADDRESSES` env var (`address=Name,...`). Format: `{"exchanges": {"address": "name"}}`
+- `ExchangeWalletIdentifier` — matches transactions from sender addresses. Loaded from `config/exchanges.json` (or `EXCHANGE_CONFIG_JSON_PATH`), supplemented by the `EXCHANGE_ADDRESSES` env var (`address=Name,...`). Format: `{"exchanges": {"address": "name"}}`
 
 Config files live in `casper-event-router/config/`. To add a new identifier, implement `AppIdentifier` in `casper-event-router/src/identifiers/` and register it in `IdentifierRegistry::new()`.
 

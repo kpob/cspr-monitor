@@ -1,5 +1,5 @@
 use odra::casper_types::{U256, U512};
-use odra::host::Deployer;
+use odra::host::{Deployer, HostEnv};
 use odra::prelude::*;
 use odra_modules::access::{Ownable, OwnableInitArgs};
 use odra_modules::erc20::{Erc20, Erc20InitArgs};
@@ -18,21 +18,10 @@ fn main() {
         initial_supply: Some(U256::from(1_000_000_000)),
     });
 
-    // Write deployed addresses as JSON for the event-router to read.
-    // DEPLOYED_CONTRACTS_JSON_PATH allows Docker services to share via a named volume.
-    // Full address strings are written here; the event-router normalizes prefixes on load.
-    let json_path = std::env::var("DEPLOYED_CONTRACTS_JSON_PATH")
-        .unwrap_or_else(|_| "deployed_contracts.json".to_string());
-    let json = serde_json::json!({
-        "contracts": {
-            "Token Contract": token.address().to_string(),
-            "Ownable Contract": ownable.address().to_string(),
-        }
-    });
-    std::fs::write(&json_path, json.to_string()).expect("Failed to write deployed contracts JSON");
+    write_deployed_contracts_json(&ownable, &token);
+    write_exchanges_json(&env);
 
     // Run simulation
-    env.set_gas(5_000_000_000);
     let user_1 = env.get_account(1);
     let user_2 = env.get_account(2);
     let user_3 = env.get_account(3);
@@ -65,5 +54,38 @@ fn main() {
         env.set_caller(user_1);
         token.try_mint(&user_2, &U256::from(1000)).expect("Failed to mint tokens");
         token.try_burn(&user_2, &U256::from(1000)).expect("Failed to burn tokens");
+    }
+}
+
+
+fn write_deployed_contracts_json(ownable: &dyn Addressable, token: &dyn Addressable) {
+    // Write deployed addresses as JSON for the event-router to read.
+    // DEPLOYED_CONTRACTS_JSON_PATH allows Docker services to share via a named volume.
+    // Full address strings are written here; the event-router normalizes prefixes on load.
+    let json_path = std::env::var("DEPLOYED_CONTRACTS_JSON_PATH")
+        .unwrap_or_else(|_| "deployed_contracts.json".to_string());
+    let json = serde_json::json!({
+        "contracts": {
+            "Token Contract": token.address().to_string(),
+            "Ownable Contract": ownable.address().to_string(),
+        }
+    });
+    std::fs::write(&json_path, json.to_string()).expect("Failed to write deployed contracts JSON");
+}
+
+fn write_exchanges_json(env: &HostEnv) {
+    // Write simulator account addresses as exchange addresses so the event-router
+    // can tag their transactions with exchange_activity events.
+    // EXCHANGE_CONFIG_JSON_PATH is shared via the same Docker volume as DEPLOYED_CONTRACTS_JSON_PATH.
+    if let Ok(exchange_path) = std::env::var("EXCHANGE_CONFIG_JSON_PATH") {
+        let exchanges_json = serde_json::json!({
+            "exchanges": {
+                env.get_account(1).to_string(): "Simulator User 1",
+                env.get_account(2).to_string(): "Simulator User 2",
+                env.get_account(3).to_string(): "Simulator User 3",
+            }
+        });
+        std::fs::write(&exchange_path, exchanges_json.to_string())
+            .expect("Failed to write exchanges JSON");
     }
 }

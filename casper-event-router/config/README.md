@@ -19,7 +19,7 @@ Defines known exchange wallet addresses and their names. The format is:
 
 The application loads exchange addresses in the following order:
 
-1. **File-based** (highest priority): Reads from the file specified in `EXCHANGE_CONFIG_PATH` environment variable, or defaults to `config/exchanges.json`
+1. **File-based** (highest priority): Reads from the file specified in `EXCHANGE_CONFIG_JSON_PATH` environment variable, or defaults to `config/exchanges.json`
 2. **Environment variable**: `EXCHANGE_ADDRESSES` in format `address1=Name1,address2=Name2`
 3. **Hardcoded defaults** (lowest priority): Fallback if neither file nor env var is available
 
@@ -29,10 +29,10 @@ The application loads exchange addresses in the following order:
 Simply place your `exchanges.json` file in the `config/` directory. The application will automatically load it on startup.
 
 #### Custom Path
-Set the `EXCHANGE_CONFIG_PATH` environment variable to specify a different location:
+Set the `EXCHANGE_CONFIG_JSON_PATH` environment variable to specify a different location:
 
 ```bash
-export EXCHANGE_CONFIG_PATH=/path/to/your/exchanges.json
+export EXCHANGE_CONFIG_JSON_PATH=/path/to/your/exchanges.json
 ```
 
 #### Dynamic Updates

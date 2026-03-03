@@ -59,6 +59,19 @@ async fn main() -> Result<()> {
         });
     }
 
+    // Spawn background task to hot-reload identifier configs (contracts/exchanges files
+    // may not exist at startup if the simulator hasn't deployed yet)
+    {
+        let identifiers = Arc::clone(&identifiers);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                identifiers.reload_all();
+            }
+        });
+    }
+
     // Main event processing loop
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENCY));
 
@@ -96,7 +109,7 @@ async fn main() -> Result<()> {
             )
             .await
             {
-                tracing::error!("Error processing event: {}", e);
+                tracing::error!("Error processing event: {:#}", e);
             }
         });
 

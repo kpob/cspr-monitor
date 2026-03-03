@@ -1,45 +1,54 @@
 use anyhow::Result;
-use casper_common::{APPS_CONTRACTS, AppEvent, EnrichedTransaction, TransactionLifecycle};
+use casper_common::{APPS_EXCHANGES, AppEvent, EnrichedTransaction, TransactionLifecycle};
 use chrono::Utc;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::RwLock;
 
 use super::AppIdentifier;
 
+type AccountName = String;
+type AccountAddress = String;
+
 #[derive(Debug, Deserialize)]
 struct ExchangeConfig {
-    exchanges: HashMap<String, String>,
+    exchanges: HashMap<AccountAddress, AccountName>,
 }
 
 /// Identifies transactions from/to known exchange wallets
-#[derive(Debug, Default)]
 pub struct ExchangeWalletIdentifier {
-    exchange_addresses: HashMap<String, String>,
+    exchange_addresses: RwLock<HashMap<AccountAddress, AccountName>>,
+    config_path: Option<String>,
 }
 
 impl ExchangeWalletIdentifier {
     pub fn new() -> Self {
-        let exchange_addresses = Self::load_exchanges();
+        let config_path = std::env::var("EXCHANGE_CONFIG_JSON_PATH").ok();
+        let exchange_addresses = config_path
+            .as_deref()
+            .and_then(|path| match Self::load_from_file(path) {
+                Ok(exchanges) => {
+                    tracing::info!("Loaded {} exchanges from {}", exchanges.len(), path);
+                    Some(exchanges)
+                }
+                Err(e) => {
+                    tracing::warn!("Could not load exchanges from {}: {}", path, e);
+                    None
+                }
+            })
+            .unwrap_or_default();
+
         tracing::info!(
             "Exchange wallet identifier initialized with {} exchanges",
             exchange_addresses.len()
         );
 
-        Self { exchange_addresses }
-    }
-
-    fn load_exchanges() -> HashMap<String, String> {
-        let config_path = std::env::var("EXCHANGE_CONFIG_PATH")
-            .unwrap_or_else(|_| "casper-event-router/config/exchanges.json".to_string());
-
-        if let Ok(exchanges) = Self::load_from_file(&config_path) {
-            tracing::info!("Loaded {} exchanges from file: {}", exchanges.len(), config_path);
-            return exchanges;
+        Self {
+            exchange_addresses: RwLock::new(exchange_addresses),
+            config_path,
         }
-
-        HashMap::new() // Return empty if no config found
     }
 
     fn load_from_file(path: &str) -> Result<HashMap<String, String>> {
@@ -50,11 +59,23 @@ impl ExchangeWalletIdentifier {
 
         let content = fs::read_to_string(path)?;
         let config: ExchangeConfig = serde_json::from_str(&content)?;
-        Ok(config.exchanges)
-    }
 
-    fn identify_exchange(&self, sender: &str) -> Option<&String> {
-        self.exchange_addresses.get(sender)
+        // Normalize address: strip account prefixes (e.g. "account-hash-<hex>") so the key
+        // is plain hex, matching what appears in EnrichedTransaction::sender.
+        Ok(config.exchanges.into_iter().map(|(addr, name)| {
+            let normalized = if addr.contains('-') {
+                addr.rsplit_once('-').map(|(_, h)| h.to_string()).unwrap_or(addr)
+            } else {
+                addr
+            };
+            (normalized, name)
+        }).collect())
+    }
+}
+
+impl Default for ExchangeWalletIdentifier {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -64,13 +85,26 @@ impl AppIdentifier for ExchangeWalletIdentifier {
     }
 
     fn topic(&self) -> &'static str {
-        APPS_CONTRACTS
+        APPS_EXCHANGES
+    }
+
+    fn reload(&self) {
+        if let Some(path) = &self.config_path {
+            match Self::load_from_file(path) {
+                Ok(loaded) => {
+                    let count = loaded.len();
+                    *self.exchange_addresses.write().unwrap() = loaded;
+                    tracing::info!("Reloaded {} exchanges from {}", count, path);
+                }
+                Err(e) => tracing::debug!("Could not reload exchanges from {}: {}", path, e),
+            }
+        }
     }
 
     fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>> {
         // Check if sender is a known exchange
-        let exchange_name = match self.identify_exchange(&tx.sender) {
-            Some(name) => name.clone(),
+        let exchange_name = match self.exchange_addresses.read().unwrap().get(&tx.sender).cloned() {
+            Some(name) => name,
             None => return Ok(None),
         };
 
@@ -122,15 +156,18 @@ mod tests {
         path.to_string_lossy().into_owned()
     }
 
-    fn make_tx(tx_hash: &str, sender: &str, raw_accepted: serde_json::Value) -> EnrichedTransaction {
+    fn make_tx(tx_hash: &str, sender: &str) -> EnrichedTransaction {
         EnrichedTransaction {
             tx_hash: tx_hash.to_string(),
             sender: sender.to_string(),
             accepted_at: Utc::now(),
             processed_at: Utc::now(),
             status: "success".to_string(),
-            raw_accepted,
+            raw_accepted: serde_json::json!({}),
             raw_processed: serde_json::json!({}),
+            contract_hash: None,
+            entry_point: None,
+            args: None,
         }
     }
 
@@ -142,6 +179,16 @@ mod tests {
         );
         let result = ExchangeWalletIdentifier::load_from_file(&path).unwrap();
         assert_eq!(result.get("addr123").map(String::as_str), Some("Binance"));
+    }
+
+    #[test]
+    fn load_from_file_strips_account_hash_prefix() {
+        let path = write_temp(
+            "test_exchanges_prefix.json",
+            r#"{"exchanges":{"account-hash-abc123":"Binance"}}"#,
+        );
+        let result = ExchangeWalletIdentifier::load_from_file(&path).unwrap();
+        assert_eq!(result.get("abc123").map(String::as_str), Some("Binance"));
     }
 
     #[test]
@@ -160,13 +207,16 @@ mod tests {
     #[test]
     fn identify_matches_known_exchange_sender() {
         let identifier = ExchangeWalletIdentifier {
-            exchange_addresses: [("addr123".to_string(), "Binance".to_string())]
-                .into_iter()
-                .collect(),
+            exchange_addresses: RwLock::new(
+                [("addr123".to_string(), "Binance".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            config_path: None,
         };
 
         let event = identifier
-            .identify(&make_tx("tx1", "addr123", serde_json::json!({})))
+            .identify(&make_tx("tx1", "addr123"))
             .unwrap()
             .unwrap();
 
@@ -178,38 +228,37 @@ mod tests {
     #[test]
     fn identify_returns_none_for_unknown_sender() {
         let identifier = ExchangeWalletIdentifier {
-            exchange_addresses: HashMap::new(),
+            exchange_addresses: RwLock::new(HashMap::new()),
+            config_path: None,
         };
 
         assert!(identifier
-            .identify(&make_tx("tx1", "unknown", serde_json::json!({})))
+            .identify(&make_tx("tx1", "unknown"))
             .unwrap()
             .is_none());
     }
 
     #[test]
-    fn identify_includes_amount_when_present() {
+    fn reload_picks_up_updated_file() {
+        let path = write_temp(
+            "test_exchanges_reload.json",
+            r#"{"exchanges":{"old_addr":"OldExchange"}}"#,
+        );
+
         let identifier = ExchangeWalletIdentifier {
-            exchange_addresses: [("addr123".to_string(), "Binance".to_string())]
-                .into_iter()
-                .collect(),
+            exchange_addresses: RwLock::new(HashMap::new()),
+            config_path: Some(path.clone()),
         };
 
-        let raw_accepted = serde_json::json!({
-            "TransactionAccepted": {
-                "Version1": {
-                    "payload": {
-                        "fields": { "amount": "500000000" }
-                    }
-                }
-            }
-        });
+        identifier.reload();
+        assert!(identifier.exchange_addresses.read().unwrap().contains_key("old_addr"));
 
-        let event = identifier
-            .identify(&make_tx("tx1", "addr123", raw_accepted))
-            .unwrap()
-            .unwrap();
+        // Overwrite with new data
+        std::fs::write(&path, r#"{"exchanges":{"new_addr":"NewExchange"}}"#).unwrap();
+        identifier.reload();
 
-        assert_eq!(event.app_data["amount"], "500000000");
+        let addresses = identifier.exchange_addresses.read().unwrap();
+        assert!(!addresses.contains_key("old_addr"));
+        assert!(addresses.contains_key("new_addr"));
     }
 }

@@ -5,6 +5,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::RwLock;
 
 use super::AppIdentifier;
 
@@ -19,46 +20,35 @@ struct ContractConfig {
 /// Identifies transactions targeting specific smart contracts
 pub struct ContractPatternIdentifier {
     // Maps contract hash -> contract name
-    contracts: HashMap<String, String>,
+    contracts: RwLock<HashMap<String, String>>,
+    config_path: Option<String>,
 }
 
 impl ContractPatternIdentifier {
     pub fn new() -> Self {
-        let mut contracts = Self::load_contracts();
-
-        // Also load dynamically deployed contracts (written by contract-deployer at runtime)
-        if let Ok(path) = std::env::var("DEPLOYED_CONTRACTS_JSON_PATH") {
-            match Self::load_from_file(&path) {
+        let config_path = std::env::var("DEPLOYED_CONTRACTS_JSON_PATH").ok();
+        let contracts = config_path
+            .as_deref()
+            .and_then(|path| match Self::load_from_file(path) {
                 Ok(deployed) => {
-                    let count = deployed.len();
-                    contracts.extend(deployed);
-                    tracing::info!("Loaded {} deployed contracts from {}", count, path);
+                    tracing::info!("Loaded {} deployed contracts from {}", deployed.len(), path);
+                    Some(deployed)
                 }
-                Err(e) => tracing::warn!("Could not load deployed contracts from {}: {}", path, e),
-            }
-        }
+                Err(e) => {
+                    tracing::warn!("Could not load deployed contracts from {}: {}", path, e);
+                    None
+                }
+            })
+            .unwrap_or_default();
 
         tracing::info!(
             "Contract pattern identifier initialized with {} contracts",
             contracts.len()
         );
 
-        Self { contracts }
-    }
-
-    fn load_contracts() -> HashMap<String, String> {
-        let config_path = std::env::var("CONTRACT_CONFIG_PATH")
-            .unwrap_or_else(|_| "casper-event-router/config/known_contracts.json".to_string());
-
-        match Self::load_from_file(&config_path) {
-            Ok(contracts) => {
-                tracing::info!("Loaded {} contracts from file: {}", contracts.len(), config_path);
-                contracts
-            },
-            Err(e) => {
-                tracing::warn!("Failed to load contracts from file: {}. Error: {}", config_path, e);
-                HashMap::new() // Return empty if no config found or failed to load
-            }
+        Self {
+            contracts: RwLock::new(contracts),
+            config_path,
         }
     }
 
@@ -73,7 +63,7 @@ impl ContractPatternIdentifier {
 
         // Reverse the mapping: name->hash becomes hash->name for efficient lookups.
         // Normalize hash: strip address prefixes (e.g. "hash-<hex>") so the key is plain hex,
-        // matching what appears in raw transaction payloads.
+        // matching what the correlator extracts from transaction payloads.
         Ok(config.contracts.into_iter().map(|(name, hash)| {
             let normalized = if hash.contains('-') {
                 hash.rsplit_once('-').map(|(_, h)| h.to_string()).unwrap_or(hash)
@@ -82,36 +72,6 @@ impl ContractPatternIdentifier {
             };
             (normalized, name)
         }).collect())
-    }
-
-    fn extract_contract_hash(&self, tx: &EnrichedTransaction) -> Option<String> {
-        // Try V1 transaction format
-        let v1 = tx.raw_accepted
-            .get("TransactionAccepted")
-            .and_then(|ta| ta.get("Version1"))
-            .and_then(|v1| v1.get("payload"))
-            .and_then(|p| p.get("fields"))
-            .and_then(|f| f.get("target"))
-            .and_then(|t| t.get("Stored"))
-            .and_then(|s| s.get("id"))
-            .and_then(|id| id.get("ByPackageHash"))
-            .and_then(|bph| bph.get("addr"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        if v1.is_some() {
-            return v1;
-        }
-
-        // Try Deploy format
-        tx.raw_accepted
-            .get("TransactionAccepted")
-            .and_then(|ta| ta.get("Deploy"))
-            .and_then(|d| d.get("session"))
-            .and_then(|s| s.get("StoredContractByHash"))
-            .and_then(|sc| sc.get("hash"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
     }
 }
 
@@ -124,16 +84,29 @@ impl AppIdentifier for ContractPatternIdentifier {
         APPS_CONTRACTS
     }
 
+    fn reload(&self) {
+        if let Some(path) = &self.config_path {
+            match Self::load_from_file(path) {
+                Ok(loaded) => {
+                    let count = loaded.len();
+                    *self.contracts.write().unwrap() = loaded;
+                    tracing::info!("Reloaded {} contracts from {}", count, path);
+                }
+                Err(e) => tracing::debug!("Could not reload contracts from {}: {}", path, e),
+            }
+        }
+    }
+
     fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>> {
-        // Extract contract hash from transaction
-        let contract_hash = match self.extract_contract_hash(tx) {
-            Some(hash) => hash,
+        // Use the contract hash already extracted by the correlator using casper-types.
+        let contract_hash = match &tx.contract_hash {
+            Some(h) => h.clone(),
             None => return Ok(None),
         };
 
         // Check if this contract is in our watch list
-        let contract_name = match self.contracts.get(&contract_hash) {
-            Some(name) => name.clone(),
+        let contract_name = match self.contracts.read().unwrap().get(&contract_hash).cloned() {
+            Some(name) => name,
             None => return Ok(None),
         };
 
@@ -142,16 +115,12 @@ impl AppIdentifier for ContractPatternIdentifier {
         app_data.insert("contract_hash".to_string(), serde_json::json!(contract_hash));
         app_data.insert("contract_name".to_string(), serde_json::json!(contract_name));
 
-        // Try to extract method/entry point
-        if let Some(entry_point) = tx.raw_accepted
-            .get("TransactionAccepted")
-            .and_then(|ta| ta.get("Version1"))
-            .and_then(|v1| v1.get("payload"))
-            .and_then(|p| p.get("fields"))
-            .and_then(|f| f.get("entry_point"))
-            .and_then(|ep| ep.as_str())
-        {
-            app_data.insert("entry_point".to_string(), serde_json::json!(entry_point));
+        if let Some(ep) = &tx.entry_point {
+            app_data.insert("entry_point".to_string(), serde_json::json!(ep));
+        }
+
+        if let Some(args) = &tx.args {
+            app_data.insert("args".to_string(), args.clone());
         }
 
         // Create the app event
@@ -192,15 +161,22 @@ mod tests {
         path.to_string_lossy().into_owned()
     }
 
-    fn make_tx(tx_hash: &str, raw_accepted: serde_json::Value) -> EnrichedTransaction {
+    fn make_tx(
+        tx_hash: &str,
+        contract_hash: Option<&str>,
+        entry_point: Option<&str>,
+    ) -> EnrichedTransaction {
         EnrichedTransaction {
             tx_hash: tx_hash.to_string(),
             sender: "sender".to_string(),
             accepted_at: Utc::now(),
             processed_at: Utc::now(),
             status: "success".to_string(),
-            raw_accepted,
+            raw_accepted: serde_json::json!({}),
             raw_processed: serde_json::json!({}),
+            contract_hash: contract_hash.map(str::to_string),
+            entry_point: entry_point.map(str::to_string),
+            args: None,
         }
     }
 
@@ -229,31 +205,21 @@ mod tests {
     }
 
     #[test]
-    fn identify_matches_v1_transaction() {
+    fn identify_matches_known_contract_hash() {
         let identifier = ContractPatternIdentifier {
-            contracts: [("abc123".to_string(), "MyContract".to_string())]
-                .into_iter()
-                .collect(),
+            contracts: RwLock::new(
+                [("abc123".to_string(), "MyContract".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            config_path: None,
         };
 
-        let raw_accepted = serde_json::json!({
-            "TransactionAccepted": {
-                "Version1": {
-                    "payload": {
-                        "fields": {
-                            "target": {
-                                "Stored": {
-                                    "id": { "ByPackageHash": { "addr": "abc123" } }
-                                }
-                            },
-                            "entry_point": "transfer"
-                        }
-                    }
-                }
-            }
-        });
+        let event = identifier
+            .identify(&make_tx("tx1", Some("abc123"), Some("transfer")))
+            .unwrap()
+            .unwrap();
 
-        let event = identifier.identify(&make_tx("tx1", raw_accepted)).unwrap().unwrap();
         assert_eq!(event.app_type, "contract_interaction");
         assert_eq!(event.app_data["contract_hash"], "abc123");
         assert_eq!(event.app_data["contract_name"], "MyContract");
@@ -261,62 +227,95 @@ mod tests {
     }
 
     #[test]
-    fn identify_matches_deploy_transaction() {
-        let identifier = ContractPatternIdentifier {
-            contracts: [("abc123".to_string(), "MyContract".to_string())]
-                .into_iter()
-                .collect(),
-        };
-
-        let raw_accepted = serde_json::json!({
-            "TransactionAccepted": {
-                "Deploy": {
-                    "session": {
-                        "StoredContractByHash": { "hash": "abc123" }
-                    }
-                }
-            }
-        });
-
-        let event = identifier.identify(&make_tx("tx1", raw_accepted)).unwrap().unwrap();
-        assert_eq!(event.app_data["contract_hash"], "abc123");
-        assert_eq!(event.app_data["contract_name"], "MyContract");
-    }
-
-    #[test]
     fn identify_returns_none_for_unknown_contract() {
         let identifier = ContractPatternIdentifier {
-            contracts: HashMap::new(),
+            contracts: RwLock::new(HashMap::new()),
+            config_path: None,
         };
 
-        let raw_accepted = serde_json::json!({
-            "TransactionAccepted": {
-                "Version1": {
-                    "payload": {
-                        "fields": {
-                            "target": {
-                                "Stored": {
-                                    "id": { "ByPackageHash": { "addr": "unknown" } }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        assert!(identifier.identify(&make_tx("tx1", raw_accepted)).unwrap().is_none());
+        assert!(identifier
+            .identify(&make_tx("tx1", Some("unknown"), None))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn identify_returns_none_when_no_contract_hash() {
         let identifier = ContractPatternIdentifier {
-            contracts: [("abc123".to_string(), "MyContract".to_string())]
-                .into_iter()
-                .collect(),
+            contracts: RwLock::new(
+                [("abc123".to_string(), "MyContract".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            config_path: None,
         };
 
-        let raw_accepted = serde_json::json!({ "TransactionAccepted": {} });
-        assert!(identifier.identify(&make_tx("tx1", raw_accepted)).unwrap().is_none());
+        assert!(identifier
+            .identify(&make_tx("tx1", None, None))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn identify_omits_entry_point_when_absent() {
+        let identifier = ContractPatternIdentifier {
+            contracts: RwLock::new(
+                [("abc123".to_string(), "MyContract".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            config_path: None,
+        };
+
+        let event = identifier
+            .identify(&make_tx("tx1", Some("abc123"), None))
+            .unwrap()
+            .unwrap();
+
+        assert!(event.app_data.get("entry_point").is_none());
+    }
+
+    #[test]
+    fn identify_includes_args_in_app_data() {
+        let identifier = ContractPatternIdentifier {
+            contracts: RwLock::new(
+                [("abc123".to_string(), "MyContract".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            config_path: None,
+        };
+
+        let mut tx = make_tx("tx1", Some("abc123"), Some("mint"));
+        tx.args = Some(serde_json::json!({"address": "account-hash-abc", "amount": "1000"}));
+
+        let event = identifier.identify(&tx).unwrap().unwrap();
+
+        assert_eq!(event.app_data["args"]["address"], "account-hash-abc");
+        assert_eq!(event.app_data["args"]["amount"], "1000");
+    }
+
+    #[test]
+    fn reload_picks_up_updated_file() {
+        let path = write_temp(
+            "test_contracts_reload.json",
+            r#"{"contracts":{"OldContract":"aaa111"}}"#,
+        );
+
+        let identifier = ContractPatternIdentifier {
+            contracts: RwLock::new(HashMap::new()),
+            config_path: Some(path.clone()),
+        };
+
+        identifier.reload();
+        assert!(identifier.contracts.read().unwrap().contains_key("aaa111"));
+
+        // Overwrite with new data
+        std::fs::write(&path, r#"{"contracts":{"NewContract":"bbb222"}}"#).unwrap();
+        identifier.reload();
+
+        let contracts = identifier.contracts.read().unwrap();
+        assert!(!contracts.contains_key("aaa111"));
+        assert!(contracts.contains_key("bbb222"));
     }
 }

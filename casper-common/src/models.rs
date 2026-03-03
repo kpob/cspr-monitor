@@ -48,6 +48,21 @@ pub struct EnrichedTransaction {
     pub status: String,
     pub raw_accepted: serde_json::Value,
     pub raw_processed: serde_json::Value,
+    /// Target contract hash (plain hex), extracted from the accepted transaction.
+    /// Not persisted to the database; populated by the event router at routing time.
+    #[sqlx(skip)]
+    #[serde(default)]
+    pub contract_hash: Option<String>,
+    /// Entry point called on the target, extracted from the accepted transaction.
+    /// Not persisted to the database; populated by the event router at routing time.
+    #[sqlx(skip)]
+    #[serde(default)]
+    pub entry_point: Option<String>,
+    /// Named args passed to the entry point, as a `{name: parsed_value}` map.
+    /// Not persisted to the database; populated by the event router at routing time.
+    #[sqlx(skip)]
+    #[serde(default)]
+    pub args: Option<serde_json::Value>,
 }
 
 /// App-specific event with metadata

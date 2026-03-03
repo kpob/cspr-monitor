@@ -108,6 +108,22 @@ services:
       retries: 10
       start_period: 5s
 
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    networks: [dev]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic raw.chain_events --partitions 12 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic enriched.chain_events --partitions 12 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic apps.contracts --partitions 6 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic apps.exchanges --partitions 6 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic signals.arbitrage --partitions 3 --replication-factor 1 &&
+        echo 'All Kafka topics created.'
+      "
+
   ingestion:
     <<: *app
     command: ingestion
@@ -116,8 +132,8 @@ services:
       DATABASE_URL: postgres://dev:dev@postgres:5432/ingest_dev
       KAFKA_BROKERS: kafka:9092
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
 
@@ -130,9 +146,10 @@ services:
       DATABASE_URL: postgres://dev:dev@postgres:5432/ingest_dev
       KAFKA_BROKERS: kafka:9092
       DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
+      EXCHANGE_CONFIG_JSON_PATH: /casper-data/exchanges.json
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
 
@@ -151,10 +168,11 @@ services:
       ODRA_CASPER_LIVENET_CHAIN_NAME: casper-net-1
       ODRA_CASPER_LIVENET_EVENTS_URL: http://nctl:18101/events
       ODRA_CASPER_LIVENET_SECRET_KEY_PATH: /keys/secret_key.pem
-      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
       ODRA_CASPER_LIVENET_KEY_1: /keys/secret_key_1.pem
       ODRA_CASPER_LIVENET_KEY_2: /keys/secret_key_2.pem
       ODRA_CASPER_LIVENET_KEY_3: /keys/secret_key_3.pem
+      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
+      EXCHANGE_CONFIG_JSON_PATH: /casper-data/exchanges.json
     depends_on:
       nctl:
         condition: service_healthy

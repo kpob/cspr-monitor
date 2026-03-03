@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use casper_common::{EnrichedTransaction, RawEvent, TRANSACTION_ACCEPTED, TRANSACTION_PROCESSED};
-use casper_types::{execution::ExecutionResult, Transaction, TransactionHash};
+use casper_types::{
+    execution::ExecutionResult, ExecutableDeployItem, Transaction, TransactionEntryPoint,
+    TransactionHash, TransactionInvocationTarget, TransactionTarget,
+};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use std::time::Duration;
@@ -11,6 +14,9 @@ struct AcceptedEvent {
     sender: String,
     accepted_at: DateTime<Utc>,
     raw_accepted: serde_json::Value,
+    contract_hash: Option<String>,
+    entry_point: Option<String>,
+    args: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,11 +66,23 @@ impl TransactionCorrelator {
         let tx_hash = transaction.hash().to_hex_string();
         let sender = transaction.initiator_addr().account_hash().to_hex_string();
 
+        let ta_value = &event.payload["TransactionAccepted"];
+        let (contract_hash, entry_point, args) = if let Some(v1) = ta_value.get("Version1") {
+            extract_from_v1(&v1["payload"])
+        } else if let Some(deploy) = ta_value.get("Deploy") {
+            extract_from_deploy(deploy)
+        } else {
+            (None, None, None)
+        };
+
         let accepted_event = AcceptedEvent {
             tx_hash: tx_hash.clone(),
             sender,
             accepted_at: event.received_at,
             raw_accepted: event.payload.clone(),
+            contract_hash,
+            entry_point,
+            args,
         };
 
         // Check if we already have the ProcessedEvent
@@ -133,6 +151,9 @@ impl TransactionCorrelator {
             status: processed.status,
             raw_accepted: accepted.raw_accepted,
             raw_processed: processed.raw_processed,
+            contract_hash: accepted.contract_hash,
+            entry_point: accepted.entry_point,
+            args: accepted.args,
         }
     }
 
@@ -178,6 +199,110 @@ impl TransactionCorrelator {
             pending_processed: self.pending_processed.len(),
         }
     }
+}
+
+/// Extract contract hash, entry point, and args from a V1 transaction payload value.
+///
+/// `payload_value` is the JSON object at `TransactionAccepted.Version1.payload`.
+fn extract_from_v1(payload_value: &serde_json::Value) -> (Option<String>, Option<String>, Option<serde_json::Value>) {
+    let fields = payload_value.get("fields");
+
+    // Deserialize the target field as a typed TransactionTarget and extract the hash.
+    let contract_hash = fields
+        .and_then(|f| f.get("target"))
+        .and_then(|t| serde_json::from_value::<TransactionTarget>(t.clone()).ok())
+        .and_then(|t| match t {
+            TransactionTarget::Stored { id, .. } => match id {
+                TransactionInvocationTarget::ByPackageHash { addr, .. } => {
+                    Some(addr.iter().map(|b| format!("{b:02x}")).collect())
+                }
+                TransactionInvocationTarget::ByHash(h) => {
+                    Some(h.iter().map(|b| format!("{b:02x}")).collect())
+                }
+                _ => None,
+            },
+            _ => None,
+        });
+
+    // The SSE stream represents entry points in two forms:
+    //   - plain string for native variants: "Transfer", "AddBid", etc.
+    //   - object for custom entry points:   {"Custom": "mint"}
+    // We try serde_json deserialization first (handles both), then fall back to
+    // TransactionEntryPoint::from() for the lowercase-string form used in tests.
+    let entry_point = fields
+        .and_then(|f| f.get("entry_point"))
+        .and_then(|ep| {
+            serde_json::from_value::<TransactionEntryPoint>(ep.clone())
+                .ok()
+                .or_else(|| ep.as_str().map(TransactionEntryPoint::from))
+        })
+        .map(|ep| match ep {
+            TransactionEntryPoint::Custom(name) => name,
+            other => other.to_string(),
+        });
+
+    // Args are in {"Named": [["name", {"parsed": ..., ...}], ...]} format.
+    // Build a simple {name: parsed_value} object for easy consumption.
+    let args = fields
+        .and_then(|f| f.get("args"))
+        .and_then(|a| a.get("Named"))
+        .and_then(|named| named.as_array())
+        .map(|arr| {
+            let mut map = serde_json::Map::new();
+            for item in arr {
+                if let (Some(name), Some(parsed)) = (
+                    item.get(0).and_then(|n| n.as_str()),
+                    item.get(1).and_then(|v| v.get("parsed")),
+                ) {
+                    map.insert(name.to_string(), parsed.clone());
+                }
+            }
+            serde_json::Value::Object(map)
+        });
+
+    (contract_hash, entry_point, args)
+}
+
+/// Extract contract hash, entry point, and args from a Deploy transaction value.
+///
+/// `deploy_value` is the JSON object at `TransactionAccepted.Deploy`.
+fn extract_from_deploy(deploy_value: &serde_json::Value) -> (Option<String>, Option<String>, Option<serde_json::Value>) {
+    let session = deploy_value
+        .get("session")
+        .and_then(|s| serde_json::from_value::<ExecutableDeployItem>(s.clone()).ok());
+
+    let contract_hash = session.as_ref().and_then(|s| match s {
+        ExecutableDeployItem::StoredContractByHash { hash, .. } => Some(format!("{hash}")),
+        ExecutableDeployItem::StoredVersionedContractByHash { hash, .. } => {
+            Some(format!("{hash}"))
+        }
+        _ => None,
+    });
+
+    let entry_point = session
+        .as_ref()
+        .map(|s| s.entry_point_name().to_string())
+        .filter(|s| !s.is_empty());
+
+    // Deploy args live at deploy_value["session"]["args"] as a list of [name, cl_value] pairs.
+    let args = deploy_value
+        .get("session")
+        .and_then(|s| s.get("args"))
+        .and_then(|a| a.as_array())
+        .map(|arr| {
+            let mut map = serde_json::Map::new();
+            for item in arr {
+                if let (Some(name), Some(parsed)) = (
+                    item.get(0).and_then(|n| n.as_str()),
+                    item.get(1).and_then(|v| v.get("parsed")),
+                ) {
+                    map.insert(name.to_string(), parsed.clone());
+                }
+            }
+            serde_json::Value::Object(map)
+        });
+
+    (contract_hash, entry_point, args)
 }
 
 #[derive(Debug, Clone)]
