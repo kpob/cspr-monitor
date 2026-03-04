@@ -1,51 +1,100 @@
 # Configuration Files
 
-This directory contains configuration files for various identifiers in the event router.
+This directory contains configuration files for the event router.
 
-## exchanges.json
+## apps_config.json
 
-Defines known exchange wallet addresses and their names. The format is:
+Unified configuration file that defines both per-app contract identifiers and known exchange wallet addresses.
+
+### Format
 
 ```json
 {
+  "apps": [
+    {
+      "name": "My App",
+      "topic": "apps.my-app",
+      "contract_hash": "<hex contract package hash>"
+    }
+  ],
   "exchanges": {
-    "address_1": "Exchange Name 1",
-    "address_2": "Exchange Name 2"
+    "<account address hex>": "Exchange Name"
   }
 }
 ```
 
 ### Loading Priority
 
-The application loads exchange addresses in the following order:
+The application loads the config in the following order:
 
-1. **File-based** (highest priority): Reads from the file specified in `EXCHANGE_CONFIG_JSON_PATH` environment variable, or defaults to `config/exchanges.json`
-2. **Environment variable**: `EXCHANGE_ADDRESSES` in format `address1=Name1,address2=Name2`
-3. **Hardcoded defaults** (lowest priority): Fallback if neither file nor env var is available
+1. **File-based** (highest priority): Reads from the file specified in `APPS_CONFIG_PATH` environment variable, or defaults to `config/apps_config.json`
+2. **Empty defaults** (lowest priority): Empty app list and exchange map if the file is missing or unreadable
 
 ### Usage
 
 #### Default Usage
-Simply place your `exchanges.json` file in the `config/` directory. The application will automatically load it on startup.
+
+Place your `apps_config.json` in the `config/` directory. The application loads it automatically on startup.
 
 #### Custom Path
-Set the `EXCHANGE_CONFIG_JSON_PATH` environment variable to specify a different location:
 
 ```bash
-export EXCHANGE_CONFIG_JSON_PATH=/path/to/your/exchanges.json
+export APPS_CONFIG_PATH=/path/to/your/apps_config.json
 ```
 
-#### Dynamic Updates
-To reload the exchange list:
-1. Edit the `exchanges.json` file
-2. Restart the application
+#### Dynamic Updates (Hot Reload)
 
-### Adding New Exchanges
+`IdentifierRegistry::reload_all()` re-reads the file at runtime — both the `apps` array and the `exchanges` map are replaced atomically. To trigger a reload, restart the application or integrate a signal handler that calls `reload_all()`.
 
-To add a new exchange, simply add a new entry to the `exchanges` object:
+---
+
+## `apps` — Per-App Contract Identifiers
+
+Each entry in the `apps` array registers a single app matched by its contract package hash. On match, an `AppEvent` is published to the app's dedicated Kafka topic.
+
+| Field | Description |
+|---|---|
+| `name` | Human-readable app name (included in `app_data.contract_name`) |
+| `topic` | Kafka topic to publish matched events to |
+| `contract_hash` | Contract package hash (hex). Prefixes like `hash-<hex>` are stripped automatically |
+
+Contract transactions that do **not** match any registered app are published to `apps.unclassified`.
+
+### Adding a New App
 
 ```json
 {
+  "apps": [
+    {
+      "name": "Existing App",
+      "topic": "apps.existing",
+      "contract_hash": "existing_hash"
+    },
+    {
+      "name": "New App Name",
+      "topic": "apps.new-app",
+      "contract_hash": "new_contract_package_hash"
+    }
+  ],
+  "exchanges": { }
+}
+```
+
+No code changes required.
+
+---
+
+## `exchanges` — Exchange Wallet Identifiers
+
+The `exchanges` map registers known exchange wallet addresses. On match (sender or transfer target), an `AppEvent` with `direction: "inflow"` or `"outflow"` is published to the `apps.exchanges` Kafka topic.
+
+Address keys may include prefixes (e.g. `account-hash-<hex>`) — they are normalized to plain hex automatically.
+
+### Adding a New Exchange
+
+```json
+{
+  "apps": [],
   "exchanges": {
     "existing_address": "Existing Exchange",
     "new_exchange_address": "New Exchange Name"
@@ -53,59 +102,4 @@ To add a new exchange, simply add a new entry to the `exchanges` object:
 }
 ```
 
-No code changes required!
-
----
-
-## known_contracts.json
-
-Defines known smart contract addresses (package hashes) and their names. The format is:
-
-```json
-{
-  "contracts": {
-    "Contract Name 1": "contract_hash_1",
-    "Contract Name 2": "contract_hash_2"
-  }
-}
-```
-
-### Loading Priority
-
-The application loads contract addresses in the following order:
-
-1. **File-based** (highest priority): Reads from the file specified in `CONTRACT_CONFIG_PATH` environment variable, or defaults to `config/known_contracts.json`
-2. **Environment variable**: `CONTRACT_PATTERNS` in format `Name1=hash1,Name2=hash2` or just `hash1,hash2`
-3. **Empty list** (lowest priority): No contracts tracked if neither file nor env var is available
-
-### Usage
-
-#### Default Usage
-Simply place your `known_contracts.json` file in the `config/` directory. The application will automatically load it on startup.
-
-#### Custom Path
-Set the `CONTRACT_CONFIG_PATH` environment variable to specify a different location:
-
-```bash
-export CONTRACT_CONFIG_PATH=/path/to/your/known_contracts.json
-```
-
-#### Dynamic Updates
-To reload the contract list:
-1. Edit the `known_contracts.json` file
-2. Restart the application
-
-### Adding New Contracts
-
-To add a new contract, simply add a new entry to the `contracts` object:
-
-```json
-{
-  "contracts": {
-    "Existing Contract": "existing_hash",
-    "New Contract Name": "new_contract_package_hash"
-  }
-}
-```
-
-The contract name will be included in the generated events, making it easier to identify which contract was interacted with.
+No code changes required.

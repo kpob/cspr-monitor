@@ -2,3 +2,4 @@
 .env
 .nctl/**
 casper-simulator/*.txt
+.env.prod

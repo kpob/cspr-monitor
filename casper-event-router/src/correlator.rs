@@ -64,7 +64,10 @@ impl TransactionCorrelator {
         .context("Failed to parse Transaction from TransactionAccepted event")?;
 
         let tx_hash = transaction.hash().to_hex_string();
-        let sender = transaction.initiator_addr().account_hash().to_hex_string();
+        let sender = match transaction.initiator_addr() {
+            casper_types::InitiatorAddr::PublicKey(pk) => pk.to_hex_string(),
+            casper_types::InitiatorAddr::AccountHash(ah) => ah.to_hex_string(),
+        };
 
         let ta_value = &event.payload["TransactionAccepted"];
         let (contract_hash, entry_point, args) = if let Some(v1) = ta_value.get("Version1") {

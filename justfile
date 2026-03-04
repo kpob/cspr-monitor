@@ -1,11 +1,10 @@
 BOOTSTRAP := "localhost:9092"
 
-set dotenv-load := true
 
 default:
   @just --list
 
-# --- Docker compose ---
+# --- Docker compose (dev) ---
 # Start all services in the background
 docker-up:
   docker compose up -d
@@ -64,6 +63,32 @@ docker-logs-deployer:
 # Follow logs for the simulator service
 docker-logs-simulator:
   docker compose logs simulator
+
+# --- Docker compose (prod) ---
+# Start production services (no nctl, no simulator)
+prod-up:
+  docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+
+# Stop production services
+prod-down:
+  docker compose --env-file .env.prod -f docker-compose.prod.yml down
+
+# Rebuild and restart production services
+prod-rebuild:
+  docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+
+# Follow logs for all production services
+prod-logs:
+  docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f
+
+# Show running production containers and health status
+prod-ps:
+  docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+
+# WARNING: destroys all prod data — wipe volumes and restart fresh
+prod-reset:
+  docker compose --env-file .env.prod -f docker-compose.prod.yml down -v
+  docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 
 # --- Status / monitoring ---
 
@@ -165,6 +190,10 @@ run-ingestion:
 # Run event-router service locally (requires .env and local librdkafka)
 run-router:
     cargo run --bin casper-event-router
+
+# Run simple consumer example locally (requires .env and local librdkafka)
+run-simple-consumer:
+    cargo run --example simple_consumer -p casper-event-consumer
 
 # Install system dependencies (librdkafka)
 install-deps:

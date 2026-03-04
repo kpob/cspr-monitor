@@ -86,9 +86,11 @@ impl EventConsumer {
                     // Process event with handler
                     match handler.handle(event.clone()).await {
                         Ok(()) => {
-                            // Commit offset after successful processing
+                            // Commit offset after successful processing.
+                            // Async commit returns immediately; the broker acknowledges in the background.
+                            // Sync commit blocks the loop and can cause max.poll.interval.ms to be exceeded.
                             if let Err(e) = self.consumer.commit_consumer_state(
-                                rdkafka::consumer::CommitMode::Sync,
+                                rdkafka::consumer::CommitMode::Async,
                             ) {
                                 tracing::error!("Failed to commit offset: {}", e);
                             } else {
