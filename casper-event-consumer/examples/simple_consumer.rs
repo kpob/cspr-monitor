@@ -11,7 +11,6 @@ impl EventHandler for SimpleHandler {
         println!("========================================");
         println!("Received Event:");
         println!("  TX Hash: {}", event.tx_hash);
-        println!("  App Type: {}", event.app_type);
         println!("  Status: {}", event.lifecycle.status);
         println!("  Sender: {}", event.lifecycle.sender);
         println!("  Accepted At: {}", event.lifecycle.accepted_at);

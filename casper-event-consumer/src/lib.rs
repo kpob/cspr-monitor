@@ -25,8 +25,6 @@ pub trait EventHandler: Send + Sync {
 pub struct EnrichedEvent {
     pub event_id: String,
     pub tx_hash: String,
-    pub app_type: String,
-    pub topic: String,
     pub timestamp: String,
     pub lifecycle: TransactionLifecycle,
     pub app_data: serde_json::Value,
@@ -83,7 +81,7 @@ impl EventConsumer {
                         }
                     };
 
-                    tracing::debug!("Received event: tx_hash={}, app_type={}", event.tx_hash, event.app_type);
+                    tracing::debug!("Received event: tx_hash={}", event.tx_hash);
 
                     // Process event with handler
                     match handler.handle(event.clone()).await {

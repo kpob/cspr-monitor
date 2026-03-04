@@ -47,8 +47,8 @@ impl IdentifierRegistry {
         }
     }
 
-    /// Run all identifiers on a transaction and collect matching events
-    pub fn identify_all(&self, tx: &EnrichedTransaction) -> Result<Vec<AppEvent>> {
+    /// Run all identifiers on a transaction and collect (topic, event) pairs
+    pub fn identify_all(&self, tx: &EnrichedTransaction) -> Result<Vec<(&'static str, AppEvent)>> {
         let mut events = Vec::new();
 
         for identifier in &self.identifiers {
@@ -58,7 +58,7 @@ impl IdentifierRegistry {
                     identifier.name(),
                     tx.tx_hash
                 );
-                events.push(app_event);
+                events.push((identifier.topic(), app_event));
             }
         }
 

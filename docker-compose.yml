@@ -184,6 +184,8 @@ services:
   exchange-monitor:
     <<: *app
     command: exchange-monitor
+    ports:
+      - "8080:8080"
     environment:
       KAFKA_BOOTSTRAP: kafka:9092
       # EXCHANGE_FILTER: "Exchange Alpha"  # uncomment to monitor only one exchange

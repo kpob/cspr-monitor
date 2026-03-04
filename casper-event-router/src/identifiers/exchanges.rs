@@ -103,8 +103,6 @@ impl ExchangeWalletIdentifier {
         AppEvent {
             event_id: format!("exchange-{}-{}", tx.tx_hash, Utc::now().timestamp_millis()),
             tx_hash: tx.tx_hash.clone(),
-            app_type: "exchange_activity".to_string(),
-            topic: self.topic().to_string(),
             timestamp: Utc::now(),
             lifecycle: TransactionLifecycle {
                 accepted_at: tx.accepted_at,
@@ -155,6 +153,11 @@ impl AppIdentifier for ExchangeWalletIdentifier {
     }
 
     fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>> {
+        // Contract calls are never exchange transfer events
+        if tx.contract_hash.is_some() {
+            return Ok(None);
+        }
+
         let addresses = self.exchange_addresses.read().unwrap();
 
         // Outflow: the exchange is the sender
@@ -275,7 +278,6 @@ mod tests {
         let tx = make_tx_with_args("tx1", "addr123", "account-hash-user999", "1000");
         let event = identifier.identify(&tx).unwrap().unwrap();
 
-        assert_eq!(event.app_type, "exchange_activity");
         assert_eq!(event.app_data["exchange"], "Binance");
         assert_eq!(event.app_data["direction"], "outflow");
         assert_eq!(event.app_data["wallet_address"], "addr123");

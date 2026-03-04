@@ -10,11 +10,6 @@ struct DeltaFilter;
 #[async_trait::async_trait]
 impl EventHandler for DeltaFilter {
     async fn handle(&self, event: EnrichedEvent) -> Result<()> {
-        // Check if this is a contract interaction event
-        if event.app_type != "contract_interaction" {
-            return Ok(());
-        }
-
         // Extract contract hash from app_data
         let contract_hash = event
             .app_data

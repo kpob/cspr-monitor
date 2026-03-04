@@ -184,16 +184,15 @@ async fn process_event(
         .context("Failed to run app identifiers")?;
 
     // Publish app-specific events to their respective topics
-    for app_event in app_events {
+    for (topic, app_event) in app_events {
         kafka_producer
-            .publish_json(&app_event.topic, &app_event.tx_hash, &app_event)
+            .publish_json(topic, &app_event.tx_hash, &app_event)
             .await
-            .with_context(|| format!("Failed to publish to topic {}", app_event.topic))?;
+            .with_context(|| format!("Failed to publish to topic {}", topic))?;
 
         tracing::info!(
-            "Published app event: type={}, topic={}, tx_hash={}",
-            app_event.app_type,
-            app_event.topic,
+            "Published app event: topic={}, tx_hash={}",
+            topic,
             app_event.tx_hash
         );
     }

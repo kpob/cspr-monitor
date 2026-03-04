@@ -70,8 +70,6 @@ pub struct EnrichedTransaction {
 pub struct AppEvent {
     pub event_id: String,
     pub tx_hash: String,
-    pub app_type: String,
-    pub topic: String,
     pub timestamp: DateTime<Utc>,
     pub lifecycle: TransactionLifecycle,
     pub app_data: serde_json::Value,

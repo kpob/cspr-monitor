@@ -18,6 +18,7 @@ struct ContractConfig {
 }
 
 /// Identifies transactions targeting specific smart contracts
+#[derive(Debug, Default)]
 pub struct ContractPatternIdentifier {
     // Maps contract hash -> contract name
     contracts: RwLock<HashMap<String, String>>,
@@ -127,8 +128,6 @@ impl AppIdentifier for ContractPatternIdentifier {
         let app_event = AppEvent {
             event_id: format!("contract-{}-{}", tx.tx_hash, Utc::now().timestamp_millis()),
             tx_hash: tx.tx_hash.clone(),
-            app_type: "contract_interaction".to_string(),
-            topic: self.topic().to_string(),
             timestamp: Utc::now(),
             lifecycle: TransactionLifecycle {
                 accepted_at: tx.accepted_at,
@@ -140,12 +139,6 @@ impl AppIdentifier for ContractPatternIdentifier {
         };
 
         Ok(Some(app_event))
-    }
-}
-
-impl Default for ContractPatternIdentifier {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -220,7 +213,6 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(event.app_type, "contract_interaction");
         assert_eq!(event.app_data["contract_hash"], "abc123");
         assert_eq!(event.app_data["contract_name"], "MyContract");
         assert_eq!(event.app_data["entry_point"], "transfer");
