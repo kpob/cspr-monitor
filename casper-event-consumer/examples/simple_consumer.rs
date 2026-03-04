@@ -1,5 +1,5 @@
 use anyhow::Result;
-use casper_common::{APPS_CONTRACTS, APPS_EXCHANGES, ENRICHED_CHAIN_EVENTS};
+use casper_common::{APPS_EXCHANGES, APPS_UNCLASSIFIED, ENRICHED_CHAIN_EVENTS};
 use casper_event_consumer::{EnrichedEvent, EventConsumer, EventHandler};
 
 /// A simple event handler that just prints events
@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     // Create consumer
     let consumer = EventConsumer::builder()
         .brokers("localhost:9092")
-        .topics(vec![APPS_CONTRACTS, APPS_EXCHANGES, ENRICHED_CHAIN_EVENTS])
+        .topics(vec![APPS_EXCHANGES, APPS_UNCLASSIFIED, ENRICHED_CHAIN_EVENTS])
         .group_id("simple-consumer-example")
         .build()?;
 

@@ -1,13 +1,11 @@
 use anyhow::Result;
-use casper_common::{APPS_EXCHANGES, AppEvent, EnrichedTransaction, TransactionLifecycle};
+use casper_common::{AppEvent, EnrichedTransaction, TransactionLifecycle};
 use chrono::Utc;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::RwLock;
-
-use super::AppIdentifier;
 
 type AccountName = String;
 type AccountAddress = String;
@@ -20,25 +18,25 @@ struct ExchangeConfig {
 /// Identifies transactions from/to known exchange wallets
 pub struct ExchangeWalletIdentifier {
     exchange_addresses: RwLock<HashMap<AccountAddress, AccountName>>,
-    config_path: Option<String>,
+    config_path: String,
 }
 
 impl ExchangeWalletIdentifier {
-    pub fn new() -> Self {
-        let config_path = std::env::var("EXCHANGE_CONFIG_JSON_PATH").ok();
-        let exchange_addresses = config_path
-            .as_deref()
-            .and_then(|path| match Self::load_from_file(path) {
-                Ok(exchanges) => {
-                    tracing::info!("Loaded {} exchanges from {}", exchanges.len(), path);
-                    Some(exchanges)
-                }
-                Err(e) => {
-                    tracing::warn!("Could not load exchanges from {}: {}", path, e);
-                    None
-                }
-            })
-            .unwrap_or_default();
+    pub fn new(config_path: &str) -> Self {
+        let exchange_addresses = match Self::load_from_file(config_path) {
+            Ok(exchanges) => {
+                tracing::info!(
+                    "Loaded {} exchanges from {}",
+                    exchanges.len(),
+                    config_path
+                );
+                exchanges
+            }
+            Err(e) => {
+                tracing::warn!("Could not load exchanges from {}: {}", config_path, e);
+                HashMap::new()
+            }
+        };
 
         tracing::info!(
             "Exchange wallet identifier initialized with {} exchanges",
@@ -47,7 +45,20 @@ impl ExchangeWalletIdentifier {
 
         Self {
             exchange_addresses: RwLock::new(exchange_addresses),
-            config_path,
+            config_path: config_path.to_string(),
+        }
+    }
+
+    pub fn reload(&self) {
+        match Self::load_from_file(&self.config_path) {
+            Ok(loaded) => {
+                let count = loaded.len();
+                *self.exchange_addresses.write().unwrap() = loaded;
+                tracing::info!("Reloaded {} exchanges from {}", count, self.config_path);
+            }
+            Err(e) => {
+                tracing::debug!("Could not reload exchanges from {}: {}", self.config_path, e)
+            }
         }
     }
 
@@ -62,9 +73,61 @@ impl ExchangeWalletIdentifier {
 
         // Normalize address: strip account prefixes (e.g. "account-hash-<hex>") so the key
         // is plain hex, matching what appears in EnrichedTransaction::sender.
-        Ok(config.exchanges.into_iter().map(|(addr, name)| {
-            (normalize_address(&addr), name)
-        }).collect())
+        Ok(config
+            .exchanges
+            .into_iter()
+            .map(|(addr, name)| (normalize_address(&addr), name))
+            .collect())
+    }
+
+    pub fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>> {
+        // Contract calls are never exchange transfer events
+        if tx.contract_hash.is_some() {
+            return Ok(None);
+        }
+
+        let addresses = self.exchange_addresses.read().unwrap();
+
+        // Outflow: the exchange is the sender
+        if let Some(exchange_name) = addresses.get(&tx.sender).cloned() {
+            drop(addresses);
+            let counterparty = tx
+                .args
+                .as_ref()
+                .and_then(|a| a.get("target"))
+                .and_then(|v| v.as_str())
+                .map(normalize_address)
+                .unwrap_or_default();
+            return Ok(Some(self.build_event(
+                tx,
+                &exchange_name,
+                "outflow",
+                &tx.sender,
+                &counterparty,
+            )));
+        }
+
+        // Inflow: the exchange is the recipient (native transfer target arg)
+        if let Some(target_raw) = tx
+            .args
+            .as_ref()
+            .and_then(|a| a.get("target"))
+            .and_then(|v| v.as_str())
+        {
+            let target_norm = normalize_address(target_raw);
+            if let Some(exchange_name) = addresses.get(&target_norm).cloned() {
+                drop(addresses);
+                return Ok(Some(self.build_event(
+                    tx,
+                    &exchange_name,
+                    "inflow",
+                    &target_norm,
+                    &tx.sender,
+                )));
+            }
+        }
+
+        Ok(None)
     }
 
     fn build_event(
@@ -78,12 +141,19 @@ impl ExchangeWalletIdentifier {
         let mut app_data = serde_json::Map::new();
         app_data.insert("exchange".to_string(), serde_json::json!(exchange_name));
         app_data.insert("direction".to_string(), serde_json::json!(direction));
-        app_data.insert("wallet_address".to_string(), serde_json::json!(wallet_address));
-        app_data.insert("counterparty".to_string(), serde_json::json!(counterparty));
+        app_data.insert(
+            "wallet_address".to_string(),
+            serde_json::json!(wallet_address),
+        );
+        app_data.insert(
+            "counterparty".to_string(),
+            serde_json::json!(counterparty),
+        );
 
         // Extract transfer amount: prefer parsed args (reliable for native transfers),
         // fall back to raw_accepted for other transaction types.
-        let amount = tx.args
+        let amount = tx
+            .args
             .as_ref()
             .and_then(|a| a.get("amount"))
             .cloned()
@@ -118,74 +188,11 @@ impl ExchangeWalletIdentifier {
 /// Strip any `<prefix>-<hex>` address format down to plain hex.
 fn normalize_address(addr: &str) -> String {
     if addr.contains('-') {
-        addr.rsplit_once('-').map(|(_, h)| h.to_string()).unwrap_or_else(|| addr.to_string())
+        addr.rsplit_once('-')
+            .map(|(_, h)| h.to_string())
+            .unwrap_or_else(|| addr.to_string())
     } else {
         addr.to_string()
-    }
-}
-
-impl Default for ExchangeWalletIdentifier {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AppIdentifier for ExchangeWalletIdentifier {
-    fn name(&self) -> &'static str {
-        "exchange_wallet"
-    }
-
-    fn topic(&self) -> &'static str {
-        APPS_EXCHANGES
-    }
-
-    fn reload(&self) {
-        if let Some(path) = &self.config_path {
-            match Self::load_from_file(path) {
-                Ok(loaded) => {
-                    let count = loaded.len();
-                    *self.exchange_addresses.write().unwrap() = loaded;
-                    tracing::info!("Reloaded {} exchanges from {}", count, path);
-                }
-                Err(e) => tracing::debug!("Could not reload exchanges from {}: {}", path, e),
-            }
-        }
-    }
-
-    fn identify(&self, tx: &EnrichedTransaction) -> Result<Option<AppEvent>> {
-        // Contract calls are never exchange transfer events
-        if tx.contract_hash.is_some() {
-            return Ok(None);
-        }
-
-        let addresses = self.exchange_addresses.read().unwrap();
-
-        // Outflow: the exchange is the sender
-        if let Some(exchange_name) = addresses.get(&tx.sender).cloned() {
-            drop(addresses);
-            let counterparty = tx.args
-                .as_ref()
-                .and_then(|a| a.get("target"))
-                .and_then(|v| v.as_str())
-                .map(normalize_address)
-                .unwrap_or_default();
-            return Ok(Some(self.build_event(tx, &exchange_name, "outflow", &tx.sender, &counterparty)));
-        }
-
-        // Inflow: the exchange is the recipient (native transfer target arg)
-        if let Some(target_raw) = tx.args
-            .as_ref()
-            .and_then(|a| a.get("target"))
-            .and_then(|v| v.as_str())
-        {
-            let target_norm = normalize_address(target_raw);
-            if let Some(exchange_name) = addresses.get(&target_norm).cloned() {
-                drop(addresses);
-                return Ok(Some(self.build_event(tx, &exchange_name, "inflow", &target_norm, &tx.sender)));
-            }
-        }
-
-        Ok(None)
     }
 }
 
@@ -216,7 +223,12 @@ mod tests {
         }
     }
 
-    fn make_tx_with_args(tx_hash: &str, sender: &str, target: &str, amount: &str) -> EnrichedTransaction {
+    fn make_tx_with_args(
+        tx_hash: &str,
+        sender: &str,
+        target: &str,
+        amount: &str,
+    ) -> EnrichedTransaction {
         let mut tx = make_tx(tx_hash, sender);
         tx.args = Some(serde_json::json!({
             "target": target,
@@ -232,10 +244,10 @@ mod tests {
     }
 
     #[test]
-    fn load_from_file_parses_valid_json() {
+    fn load_from_file_parses_unified_config() {
         let path = write_temp(
-            "test_exchanges_valid.json",
-            r#"{"exchanges":{"addr123":"Binance"}}"#,
+            "test_exchanges_unified.json",
+            r#"{"apps":[],"exchanges":{"addr123":"Binance"}}"#,
         );
         let result = ExchangeWalletIdentifier::load_from_file(&path).unwrap();
         assert_eq!(result.get("addr123").map(String::as_str), Some("Binance"));
@@ -245,7 +257,7 @@ mod tests {
     fn load_from_file_strips_account_hash_prefix() {
         let path = write_temp(
             "test_exchanges_prefix.json",
-            r#"{"exchanges":{"account-hash-abc123":"Binance"}}"#,
+            r#"{"apps":[],"exchanges":{"account-hash-abc123":"Binance"}}"#,
         );
         let result = ExchangeWalletIdentifier::load_from_file(&path).unwrap();
         assert_eq!(result.get("abc123").map(String::as_str), Some("Binance"));
@@ -253,15 +265,13 @@ mod tests {
 
     #[test]
     fn load_from_file_returns_err_for_missing_file() {
-        let result = ExchangeWalletIdentifier::load_from_file("/nonexistent/exchanges.json");
-        assert!(result.is_err());
+        assert!(ExchangeWalletIdentifier::load_from_file("/nonexistent/config.json").is_err());
     }
 
     #[test]
     fn load_from_file_returns_err_for_invalid_json() {
         let path = write_temp("test_exchanges_invalid.json", "not json");
-        let result = ExchangeWalletIdentifier::load_from_file(&path);
-        assert!(result.is_err());
+        assert!(ExchangeWalletIdentifier::load_from_file(&path).is_err());
     }
 
     #[test]
@@ -272,7 +282,7 @@ mod tests {
                     .into_iter()
                     .collect(),
             ),
-            config_path: None,
+            config_path: String::new(),
         };
 
         let tx = make_tx_with_args("tx1", "addr123", "account-hash-user999", "1000");
@@ -293,7 +303,7 @@ mod tests {
                     .into_iter()
                     .collect(),
             ),
-            config_path: None,
+            config_path: String::new(),
         };
 
         let tx = make_tx_with_args("tx2", "user999", "account-hash-addr123", "500");
@@ -310,11 +320,16 @@ mod tests {
     fn identify_returns_none_for_unknown_sender_and_recipient() {
         let identifier = ExchangeWalletIdentifier {
             exchange_addresses: RwLock::new(HashMap::new()),
-            config_path: None,
+            config_path: String::new(),
         };
 
         assert!(identifier
-            .identify(&make_tx_with_args("tx1", "unknown", "account-hash-alsoUnknown", "100"))
+            .identify(&make_tx_with_args(
+                "tx1",
+                "unknown",
+                "account-hash-alsoUnknown",
+                "100"
+            ))
             .unwrap()
             .is_none());
     }
@@ -327,10 +342,9 @@ mod tests {
                     .into_iter()
                     .collect(),
             ),
-            config_path: None,
+            config_path: String::new(),
         };
 
-        // sender is unknown, no args → no match
         assert!(identifier
             .identify(&make_tx("tx1", "unknownSender"))
             .unwrap()
@@ -341,19 +355,26 @@ mod tests {
     fn reload_picks_up_updated_file() {
         let path = write_temp(
             "test_exchanges_reload.json",
-            r#"{"exchanges":{"old_addr":"OldExchange"}}"#,
+            r#"{"apps":[],"exchanges":{"old_addr":"OldExchange"}}"#,
         );
 
         let identifier = ExchangeWalletIdentifier {
             exchange_addresses: RwLock::new(HashMap::new()),
-            config_path: Some(path.clone()),
+            config_path: path.clone(),
         };
 
         identifier.reload();
-        assert!(identifier.exchange_addresses.read().unwrap().contains_key("old_addr"));
+        assert!(identifier
+            .exchange_addresses
+            .read()
+            .unwrap()
+            .contains_key("old_addr"));
 
-        // Overwrite with new data
-        std::fs::write(&path, r#"{"exchanges":{"new_addr":"NewExchange"}}"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"apps":[],"exchanges":{"new_addr":"NewExchange"}}"#,
+        )
+        .unwrap();
         identifier.reload();
 
         let addresses = identifier.exchange_addresses.read().unwrap();

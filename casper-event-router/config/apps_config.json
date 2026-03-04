@@ -1,4 +1,31 @@
 {
+  "apps": [
+    {
+      "name": "Casper Delta",
+      "topic": "apps.casper-delta",
+      "contract_hash": "4b15cdbc606589ebfdcdb3f8f81e2a2a0d44298e3d1faf0743d2be2d90d8cb6b"
+    },
+    {
+      "name": "Delta Long Token",
+      "topic": "apps.delta-long-token",
+      "contract_hash": "30f66fc8f60ee99e7a8a05c3a308ee623c229247c0cc7ac8dc76621157397a93"
+    },
+    {
+      "name": "Delta Short Token",
+      "topic": "apps.delta-short-token",
+      "contract_hash": "d65a7e04b687bd873af5819de67d563ff347560dfef16ad2c1065cac3e115b96"
+    },
+    {
+      "name": "Styks Price Supplier",
+      "topic": "apps.styks",
+      "contract_hash": "acd6c58964fb474c686b02ca1945364cff192519074376de14a97b58e07f9d96"
+    },
+    {
+      "name": "Casper Trade",
+      "topic": "apps.casper-trade",
+      "contract_hash": "1dbac65585475fec53e5b1f9110923c8d232921702097e83105b36751d682186"
+    }
+  ],
   "exchanges": {
     "011c74ebfcc1b19bc3e578bec3ecfa2d484f2a00d7e9e8152c4c70f519f6a89f6a": "Crypto.com",
     "020396133b3bbbfcf7d1961390f9449e2de5813523180376df361cb31a1ca965b576": "Crypto.com 2",

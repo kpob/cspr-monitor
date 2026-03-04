@@ -119,7 +119,7 @@ services:
       bash -c "
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic raw.chain_events --partitions 12 --replication-factor 1 &&
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic enriched.chain_events --partitions 12 --replication-factor 1 &&
-        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic apps.contracts --partitions 6 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic apps.unclassified --partitions 6 --replication-factor 1 &&
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic apps.exchanges --partitions 6 --replication-factor 1 &&
         kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic signals.arbitrage --partitions 3 --replication-factor 1 &&
         echo 'All Kafka topics created.'

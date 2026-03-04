@@ -186,7 +186,7 @@ async fn process_event(
     // Publish app-specific events to their respective topics
     for (topic, app_event) in app_events {
         kafka_producer
-            .publish_json(topic, &app_event.tx_hash, &app_event)
+            .publish_json(&topic, &app_event.tx_hash, &app_event)
             .await
             .with_context(|| format!("Failed to publish to topic {}", topic))?;
 
