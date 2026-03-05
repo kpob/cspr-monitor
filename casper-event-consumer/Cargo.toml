@@ -15,3 +15,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 casper-common = { path = "../casper-common" }
 tracing-subscriber = { workspace = true }
+
+[[example]]
+name = "simple_consumer"

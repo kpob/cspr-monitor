@@ -47,6 +47,7 @@ impl PerAppIdentifier {
         let mut app_data = serde_json::Map::new();
         app_data.insert("contract_hash".to_string(), serde_json::json!(contract_hash));
         app_data.insert("contract_name".to_string(), serde_json::json!(&self.name));
+        app_data.insert("sender".to_string(), serde_json::json!(&tx.sender));
 
         if let Some(ep) = &tx.entry_point {
             app_data.insert("entry_point".to_string(), serde_json::json!(ep));
@@ -171,6 +172,7 @@ mod tests {
         assert_eq!(event.app_data["contract_hash"], "abc123");
         assert_eq!(event.app_data["contract_name"], "MyApp");
         assert_eq!(event.app_data["entry_point"], "transfer");
+        assert_eq!(event.app_data["sender"], "sender");
     }
 
     #[test]

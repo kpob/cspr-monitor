@@ -15,6 +15,7 @@ use identifiers::IdentifierRegistry;
 const MAX_CONCURRENCY: usize = 4;
 const CLEANUP_INTERVAL_SECS: u64 = 60;
 const CORRELATION_TIMEOUT_SECS: u64 = 300; // 5 minutes
+const DEFAULT_CONFIG_RELOAD_INTERVAL_SECS: u64 = 900;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -63,8 +64,12 @@ async fn main() -> Result<()> {
     // may not exist at startup if the simulator hasn't deployed yet)
     {
         let identifiers = Arc::clone(&identifiers);
+        let reload_interval_secs = std::env::var("CONFIG_RELOAD_INTERVAL_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_CONFIG_RELOAD_INTERVAL_SECS);
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            let mut interval = tokio::time::interval(Duration::from_secs(reload_interval_secs));
             loop {
                 interval.tick().await;
                 identifiers.reload_all();

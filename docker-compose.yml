@@ -125,6 +125,7 @@ services:
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic apps.unclassified --partitions 6 --replication-factor 1 &&
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic apps.exchanges --partitions 6 --replication-factor 1 &&
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic signals.arbitrage --partitions 3 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic apps.native --partitions 6 --replication-factor 1 &&
         echo 'All Kafka topics created.'
       "
 

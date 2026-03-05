@@ -1,12 +1,17 @@
 use anyhow::Result;
-use casper_common::{APPS_EXCHANGES, APPS_UNCLASSIFIED, AppEvent, EnrichedTransaction, TransactionLifecycle};
+use casper_common::{
+    APPS_EXCHANGES, APPS_NATIVE, APPS_UNCLASSIFIED, AppEvent, EnrichedTransaction,
+    TransactionLifecycle,
+};
 use chrono::Utc;
 use std::sync::{Arc, RwLock};
 
 pub mod contracts;
 pub mod exchanges;
+pub mod native;
 
 use contracts::{PerAppIdentifier, load_app_identifiers};
+use native::NativeTransactionIdentifier;
 
 const DEFAULT_CONFIG_PATH: &str = "config/apps_config.json";
 
@@ -17,6 +22,7 @@ const DEFAULT_CONFIG_PATH: &str = "config/apps_config.json";
 pub struct IdentifierRegistry {
     app_identifiers: Arc<RwLock<Vec<PerAppIdentifier>>>,
     exchange_identifier: exchanges::ExchangeWalletIdentifier,
+    native_identifier: NativeTransactionIdentifier,
     config_path: String,
 }
 
@@ -49,6 +55,7 @@ impl IdentifierRegistry {
         Self {
             app_identifiers: Arc::new(RwLock::new(app_identifiers)),
             exchange_identifier,
+            native_identifier: NativeTransactionIdentifier,
             config_path,
         }
     }
@@ -113,6 +120,16 @@ impl IdentifierRegistry {
             events.push((APPS_EXCHANGES.to_string(), event));
         }
 
+        // Native transaction identifier (Transfer, Delegate, Undelegate, Redelegate, bids, Session/WASM)
+        if let Some(event) = self.native_identifier.identify(tx)? {
+            tracing::debug!(
+                "Native identifier matched tx_hash: {}, type: {}",
+                tx.tx_hash,
+                event.app_data["transaction_type"]
+            );
+            events.push((APPS_NATIVE.to_string(), event));
+        }
+
         Ok(events)
     }
 }
@@ -129,6 +146,7 @@ fn build_unclassified_event(tx: &EnrichedTransaction, contract_hash: &str) -> Ap
         "contract_hash".to_string(),
         serde_json::json!(contract_hash),
     );
+    app_data.insert("sender".to_string(), serde_json::json!(&tx.sender));
     if let Some(ep) = &tx.entry_point {
         app_data.insert("entry_point".to_string(), serde_json::json!(ep));
     }

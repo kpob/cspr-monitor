@@ -1,5 +1,5 @@
 use anyhow::Result;
-use casper_common::{APPS_EXCHANGES, APPS_UNCLASSIFIED, ENRICHED_CHAIN_EVENTS};
+use casper_common::{APPS_EXCHANGES, APPS_UNCLASSIFIED};
 use casper_event_consumer::{EnrichedEvent, EventConsumer, EventHandler};
 
 /// A simple event handler that just prints events
@@ -29,10 +29,12 @@ async fn main() -> Result<()> {
     println!("This will consume events from Kafka and print them to stdout.");
     println!("Press Ctrl+C to stop.\n");
 
+    let brokers = std::env::var("KAFKA_BROKERS").unwrap_or_else(|_| "kafka:29092".to_string());
+
     // Create consumer
     let consumer = EventConsumer::builder()
-        .brokers("localhost:9092")
-        .topics(vec![APPS_EXCHANGES, APPS_UNCLASSIFIED, ENRICHED_CHAIN_EVENTS])
+        .brokers(brokers)
+        .topics(vec![APPS_EXCHANGES, APPS_UNCLASSIFIED])
         .group_id("simple-consumer-example")
         .build()?;
 

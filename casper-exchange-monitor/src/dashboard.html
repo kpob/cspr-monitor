@@ -224,7 +224,7 @@
       <td>${toCSPR(record.amount)}</td>
       <td class="mono">${record.counterparty.slice(0, 20)}…</td>
       <td style="color:${record.status==='Success'?'#86efac':'#fca5a5'}">${record.status}</td>
-      <td class="mono">${record.tx_hash.slice(0, 12)}…</td>`;
+      <td class="mono"><a href="https://cspr.live/transaction/${record.tx_hash}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted">${record.tx_hash.slice(0, 12)}…</a></td>`;
     tbody.prepend(row);
     while (tbody.rows.length > MAX_TABLE_ROWS) tbody.deleteRow(tbody.rows.length - 1);
   }

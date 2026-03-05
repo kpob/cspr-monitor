@@ -181,6 +181,7 @@ kafka-init-topics:
   just kafka-topic-create raw.chain_events 12
   just kafka-topic-create enriched.chain_events 12
   just kafka-topic-create signals.arbitrage 3
+  just kafka-topic-create apps.native 6
 
 # --- Local development ---
 # Run ingestion service locally (requires .env and local librdkafka)
