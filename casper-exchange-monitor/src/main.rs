@@ -24,6 +24,7 @@ use tokio_stream::wrappers::BroadcastStream;
 struct EventRecord {
     timestamp: String,
     exchange: String,
+    exchange_address: String,
     direction: String,
     amount: u64,
     counterparty: String,
@@ -124,6 +125,7 @@ impl EventHandler for ExchangeHandler {
         let record = EventRecord {
             timestamp: event.lifecycle.processed_at.clone(),
             exchange,
+            exchange_address: event.lifecycle.sender.clone(),
             direction,
             amount,
             counterparty,

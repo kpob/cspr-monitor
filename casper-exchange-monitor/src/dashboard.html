@@ -176,7 +176,7 @@
   const MAX_TABLE_ROWS = 20;
 
   function toCSPR(motes) {
-    return (motes / MOTES_PER_CSPR).toFixed(4);
+    return (motes / MOTES_PER_CSPR).toFixed(2);
   }
 
   function formatTime(iso) {
@@ -185,9 +185,16 @@
 
   function refreshChart() {
     const labels = Object.keys(exchangeStats);
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = labels.map(e => toCSPR(exchangeStats[e].inflow_total));
-    chart.data.datasets[1].data = labels.map(e => toCSPR(exchangeStats[e].outflow_total));
+    const totalInflow = labels.reduce((sum, e) => sum + exchangeStats[e].inflow_total, 0);
+    const totalOutflow = labels.reduce((sum, e) => sum + exchangeStats[e].outflow_total, 0);
+    const allLabels = labels.length > 1 ? ['Total', ...labels] : labels;
+    chart.data.labels = allLabels;
+    chart.data.datasets[0].data = labels.length > 1
+      ? [toCSPR(totalInflow), ...labels.map(e => toCSPR(exchangeStats[e].inflow_total))]
+      : labels.map(e => toCSPR(exchangeStats[e].inflow_total));
+    chart.data.datasets[1].data = labels.length > 1
+      ? [toCSPR(totalOutflow), ...labels.map(e => toCSPR(exchangeStats[e].outflow_total))]
+      : labels.map(e => toCSPR(exchangeStats[e].outflow_total));
     chart.update();
   }
 
@@ -198,7 +205,21 @@
       container.innerHTML = '<p id="emptyMsg">No data yet — waiting for events.</p>';
       return;
     }
-    container.innerHTML = entries.map(([name, s]) => `
+    const totalInflow = entries.reduce((sum, [, s]) => sum + s.inflow_total, 0);
+    const totalOutflow = entries.reduce((sum, [, s]) => sum + s.outflow_total, 0);
+    const totalTxCount = entries.reduce((sum, [, s]) => sum + s.tx_count, 0);
+    const totalRow = entries.length > 1 ? `
+      <div class="stat-row" style="border-bottom:1px solid #4d3f6b;margin-bottom:0.25rem">
+        <span class="exchange-name" style="color:#a78bfa">Total</span>
+        <span>
+          <span style="color:#86efac">+${toCSPR(totalInflow)}</span>
+          &nbsp;/&nbsp;
+          <span style="color:#fca5a5">-${toCSPR(totalOutflow)}</span>
+          &nbsp; CSPR &nbsp;
+          <span style="color:#94a3b8">(${totalTxCount} tx)</span>
+        </span>
+      </div>` : '';
+    container.innerHTML = totalRow + entries.map(([name, s]) => `
       <div class="stat-row">
         <span class="exchange-name">${name}</span>
         <span>
@@ -219,12 +240,12 @@
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${formatTime(record.timestamp)}</td>
-      <td style="color:#c4b5fd;font-weight:600">${record.exchange}</td>
+      <td><a href="https://cspr.live/account/${record.exchange_address}" target="_blank" rel="noopener" style="color:#c4b5fd;font-weight:600;text-decoration:underline dotted">${record.exchange}</a></td>
       <td>${badge}</td>
       <td>${toCSPR(record.amount)}</td>
-      <td class="mono">${record.counterparty.slice(0, 20)}…</td>
-      <td style="color:${record.status==='Success'?'#86efac':'#fca5a5'}">${record.status}</td>
-      <td class="mono"><a href="https://cspr.live/transaction/${record.tx_hash}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted">${record.tx_hash.slice(0, 12)}…</a></td>`;
+      <td class="mono"><a href="https://cspr.live/account/${record.counterparty}" target="_blank" rel="noopener" style="color:#94a3b8;text-decoration:underline dotted">${record.counterparty.slice(0, 20)}…</a></td>
+      <td><span class="badge ${record.status==='success'?'badge-in':'badge-out'}">${record.status.charAt(0).toUpperCase()+record.status.slice(1)}</span></td>
+      <td class="mono"><a href="https://cspr.live/transaction/${record.tx_hash}" target="_blank" rel="noopener" style="color:#94a3b8;text-decoration:underline dotted">${record.tx_hash.slice(0, 12)}…</a></td>`;
     tbody.prepend(row);
     while (tbody.rows.length > MAX_TABLE_ROWS) tbody.deleteRow(tbody.rows.length - 1);
   }
