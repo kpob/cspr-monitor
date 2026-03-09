@@ -18,8 +18,7 @@ fn main() {
         initial_supply: Some(U256::from(1_000_000_000)),
     });
 
-    write_deployed_contracts_json(&ownable, &token);
-    write_exchanges_json(&env);
+    write_apps_config_json(&env, &ownable, &token);
 
     // Account roles:
     //   exchange_1 (account 1) = Exchange Alpha  — registered exchange
@@ -84,33 +83,33 @@ fn main() {
 }
 
 
-fn write_deployed_contracts_json(ownable: &dyn Addressable, token: &dyn Addressable) {
-    // Write deployed addresses as JSON for the event-router to read.
-    // DEPLOYED_CONTRACTS_JSON_PATH allows Docker services to share via a named volume.
+fn write_apps_config_json(env: &HostEnv, ownable: &dyn Addressable, token: &dyn Addressable) {
+    // Write a single unified config file consumed by the event-router's IdentifierRegistry.
+    // Format matches what load_app_identifiers() and ExchangeWalletIdentifier both expect:
+    //   { "apps": [{name, topic, contract_hash}], "exchanges": {address: name} }
+    // APPS_CONFIG_PATH is shared between the simulator and event-router via a Docker named volume.
     // Full address strings are written here; the event-router normalizes prefixes on load.
-    let json_path = std::env::var("DEPLOYED_CONTRACTS_JSON_PATH")
-        .unwrap_or_else(|_| "deployed_contracts.json".to_string());
+    let json_path = std::env::var("APPS_CONFIG_PATH")
+        .unwrap_or_else(|_| "apps_config.json".to_string());
+
     let json = serde_json::json!({
-        "contracts": {
-            "Token Contract": token.address().to_string(),
-            "Ownable Contract": ownable.address().to_string(),
+        "apps": [
+            {
+                "name": "Token Contract",
+                "topic": "apps.contracts",
+                "contract_hash": token.address().to_string()
+            },
+            {
+                "name": "Ownable Contract",
+                "topic": "apps.contracts",
+                "contract_hash": ownable.address().to_string()
+            }
+        ],
+        "exchanges": {
+            env.get_account(1).to_string(): "Exchange Alpha",
+            env.get_account(2).to_string(): "Exchange Beta"
         }
     });
-    std::fs::write(&json_path, json.to_string()).expect("Failed to write deployed contracts JSON");
-}
 
-fn write_exchanges_json(env: &HostEnv) {
-    // Write only accounts 1 & 2 as exchange addresses.
-    // Accounts 3 & 4 are regular users and must NOT appear here.
-    // EXCHANGE_CONFIG_JSON_PATH is shared via the same Docker volume as DEPLOYED_CONTRACTS_JSON_PATH.
-    if let Ok(exchange_path) = std::env::var("EXCHANGE_CONFIG_JSON_PATH") {
-        let exchanges_json = serde_json::json!({
-            "exchanges": {
-                env.get_account(1).to_string(): "Exchange Alpha",
-                env.get_account(2).to_string(): "Exchange Beta",
-            }
-        });
-        std::fs::write(&exchange_path, exchanges_json.to_string())
-            .expect("Failed to write exchanges JSON");
-    }
+    std::fs::write(&json_path, json.to_string()).expect("Failed to write apps config JSON");
 }

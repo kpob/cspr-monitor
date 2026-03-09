@@ -150,8 +150,7 @@ services:
     environment:
       DATABASE_URL: postgres://dev:dev@postgres:5432/ingest_dev
       KAFKA_BROKERS: kafka:29092
-      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
-      EXCHANGE_CONFIG_JSON_PATH: /casper-data/exchanges.json
+      APPS_CONFIG_PATH: /casper-data/apps_config.json
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -177,8 +176,7 @@ services:
       ODRA_CASPER_LIVENET_KEY_2: /keys/secret_key_2.pem
       ODRA_CASPER_LIVENET_KEY_3: /keys/secret_key_3.pem
       ODRA_CASPER_LIVENET_KEY_4: /keys/secret_key_4.pem
-      DEPLOYED_CONTRACTS_JSON_PATH: /casper-data/deployed_contracts.json
-      EXCHANGE_CONFIG_JSON_PATH: /casper-data/exchanges.json
+      APPS_CONFIG_PATH: /casper-data/apps_config.json
     depends_on:
       nctl:
         condition: service_healthy
