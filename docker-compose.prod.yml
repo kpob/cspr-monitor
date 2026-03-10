@@ -100,7 +100,7 @@ services:
       LOG_FORMAT: json
       RUST_LOG: info
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:19090:9090"
       - "127.0.0.1:9100:9100"
     depends_on:
       kafka-init:
@@ -176,6 +176,50 @@ services:
         reservations:
           memory: 128m
 
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    networks: [prod]
+    logging: *default-logging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  grafana:
+    image: grafana/grafana-oss:10.4.2
+    networks: [prod]
+    logging: *default-logging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
 volumes:
   kafka-data:
   postgres-data:
+  prometheus-data:
+  grafana-data:
