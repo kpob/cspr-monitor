@@ -95,6 +95,7 @@ pub trait Database {
     async fn get_unprocessed_events(&self, limit: i64) -> Result<Vec<RawEvent>>;
     async fn mark_processed(&self, id: i64) -> Result<()>;
     async fn get_enriched_transactions(&self, limit: i64) -> Result<Vec<EnrichedTransaction>>;
+    async fn delete_old_raw_events(&self, older_than_days: i64) -> Result<u64>;
 }
 
 #[derive(Clone)]
@@ -220,5 +221,15 @@ impl Database for PostgresDB {
             .await?;
 
         Ok(txs)
+    }
+
+    async fn delete_old_raw_events(&self, older_than_days: i64) -> Result<u64> {
+        let result = sqlx::query(
+            "DELETE FROM raw_events WHERE received_at < NOW() - ($1 * INTERVAL '1 day')",
+        )
+        .bind(older_than_days)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 }

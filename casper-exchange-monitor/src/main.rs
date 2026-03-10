@@ -110,6 +110,13 @@ impl EventHandler for ExchangeHandler {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
+        metrics::counter!(
+            "casper_exchange_events_total",
+            "exchange" => exchange.clone(),
+            "direction" => direction.clone()
+        )
+        .increment(1);
+
         let preposition = if direction == "inflow" { "from" } else { "to" };
         tracing::info!(
             "[{}] {} {} motes {} {} (tx={}, status={})",
@@ -156,6 +163,10 @@ async fn index_handler() -> Html<&'static str> {
     Html(DASHBOARD_HTML)
 }
 
+async fn health_handler() -> Json<serde_json::Value> {
+    Json(serde_json::json!({"status": "ok", "service": "casper-exchange-monitor"}))
+}
+
 async fn stats_handler(State(app): State<AppState>) -> Json<StatsResponse> {
     let guard = app.state.lock().await;
     Json(StatsResponse {
@@ -186,6 +197,7 @@ async fn start_web_server(
     let app_state = AppState { broadcast_tx, state };
     let router = Router::new()
         .route("/", get(index_handler))
+        .route("/health", get(health_handler))
         .route("/api/stats", get(stats_handler))
         .route("/events", get(sse_handler))
         .with_state(app_state);
@@ -204,6 +216,8 @@ async fn main() -> Result<()> {
     casper_common::init_tracing();
 
     tracing::info!("Starting casper-exchange-monitor");
+
+    casper_common::metrics::install_prometheus_exporter(9102);
 
     let filter_exchange = std::env::var("EXCHANGE_FILTER").ok();
     match &filter_exchange {
@@ -232,13 +246,20 @@ async fn main() -> Result<()> {
         .group_id("exchange-monitor-v1")
         .build()?;
 
-    consumer
-        .subscribe(ExchangeHandler {
+    tokio::select! {
+        result = consumer.subscribe(ExchangeHandler {
             filter_exchange,
             broadcast_tx,
             state: dashboard_state,
-        })
-        .await?;
+        }) => {
+            if let Err(e) = result {
+                tracing::error!("Consumer error: {}", e);
+            }
+        }
+        _ = casper_common::shutdown::shutdown_signal() => {
+            tracing::info!("Shutting down casper-exchange-monitor");
+        }
+    }
 
     Ok(())
 }
@@ -246,4 +267,3 @@ async fn main() -> Result<()> {
 // ── Embedded dashboard HTML ───────────────────────────────────────────────────
 
 const DASHBOARD_HTML: &str = include_str!("dashboard.html");
-

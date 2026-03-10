@@ -1,6 +1,9 @@
 pub mod database;
+pub mod health;
 pub mod kafka;
+pub mod metrics;
 pub mod models;
+pub mod shutdown;
 pub mod topics;
 mod tracing;
 

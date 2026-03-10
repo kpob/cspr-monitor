@@ -12,10 +12,12 @@ casper-common = { path = "../casper-common" }
 casper-types = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+axum = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
 dotenv = { workspace = true }
 futures = { workspace = true }
+metrics = { workspace = true }
 rdkafka = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

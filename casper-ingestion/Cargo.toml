@@ -5,11 +5,13 @@ edition = "2024"
 
 [dependencies]
 casper-common = { path = "../casper-common" }
+axum = { workspace = true }
 dotenv = { workspace = true }
 anyhow = { workspace = true }
 eventsource-stream = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
+metrics = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }

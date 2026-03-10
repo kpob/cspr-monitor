@@ -4,16 +4,25 @@ networks:
   prod:
     driver: bridge
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 x-app: &app
   build:
     context: .
   networks: [prod]
   restart: unless-stopped
+  stop_grace_period: 30s
+  logging: *default-logging
 
 services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     networks: [prod]
+    logging: *default-logging
     ports:
       - "9092:9092"
     environment:
@@ -28,6 +37,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       CLUSTER_ID: 7T_zQf_kSKqWaHGYuK_4bw
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -36,10 +46,15 @@ services:
       timeout: 10s
       retries: 10
       start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 768m
 
   postgres:
     image: postgres:16-alpine
     networks: [prod]
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -56,6 +71,7 @@ services:
   kafka-init:
     image: confluentinc/cp-kafka:7.6.0
     networks: [prod]
+    logging: *default-logging
     depends_on:
       kafka:
         condition: service_healthy
@@ -81,11 +97,28 @@ services:
       LIVENET_EVENT_ADDRESS: ${LIVENET_EVENT_ADDRESS}
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       KAFKA_BROKERS: kafka:29092
+      LOG_FORMAT: json
+      RUST_LOG: info
+    ports:
+      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:9100:9100"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
 
   event-router:
     <<: *app
@@ -93,22 +126,55 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       KAFKA_BROKERS: kafka:29092
+      RAW_EVENTS_RETENTION_DAYS: "14"
+      LOG_FORMAT: json
+      RUST_LOG: info
+    ports:
+      - "127.0.0.1:9091:9091"
+      - "127.0.0.1:9101:9101"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9091/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
 
   exchange-monitor:
     <<: *app
     command: exchange-monitor
     ports:
       - "8080:8080"
+      - "127.0.0.1:9102:9102"
     environment:
       KAFKA_BOOTSTRAP: kafka:29092
+      LOG_FORMAT: json
+      RUST_LOG: info
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
 
 volumes:
   kafka-data:
