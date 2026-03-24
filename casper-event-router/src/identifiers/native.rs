@@ -48,13 +48,13 @@ impl NativeTransactionIdentifier {
 
 fn classify(entry_point: Option<&str>) -> &'static str {
     match entry_point {
-        Some("Transfer") => "native_transfer",
-        Some("Delegate") => "delegation",
-        Some("Undelegate") => "undelegation",
-        Some("Redelegate") => "redelegation",
-        Some("AddBid") => "add_bid",
-        Some("WithdrawBid") => "withdraw_bid",
-        Some("ActivateBid") => "activate_bid",
+        Some("transfer") => "native_transfer",
+        Some("delegate") => "delegation",
+        Some("undelegate") => "undelegation",
+        Some("redelegate") => "redelegation",
+        Some("add_bid") => "add_bid",
+        Some("withdraw_bid") => "withdraw_bid",
+        Some("activate_bid") => "activate_bid",
         _ => "session",
     }
 }

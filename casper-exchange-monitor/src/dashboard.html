@@ -172,7 +172,7 @@
     },
   });
 
-  const exchangeStats = {};
+  const actorStats = {};
   const MAX_TABLE_ROWS = 20;
 
   function toCSPR(motes) {
@@ -184,29 +184,29 @@
   }
 
   function refreshChart() {
-    const labels = Object.keys(exchangeStats);
-    const totalInflow = labels.reduce((sum, e) => sum + exchangeStats[e].inflow_total, 0);
-    const totalOutflow = labels.reduce((sum, e) => sum + exchangeStats[e].outflow_total, 0);
+    const labels = Object.keys(actorStats);
+    const totalInflow = labels.reduce((sum, e) => sum + (actorStats[e].actions['inflow'] || 0), 0);
+    const totalOutflow = labels.reduce((sum, e) => sum + (actorStats[e].actions['outflow'] || 0), 0);
     const allLabels = labels.length > 1 ? ['Total', ...labels] : labels;
     chart.data.labels = allLabels;
     chart.data.datasets[0].data = labels.length > 1
-      ? [toCSPR(totalInflow), ...labels.map(e => toCSPR(exchangeStats[e].inflow_total))]
-      : labels.map(e => toCSPR(exchangeStats[e].inflow_total));
+      ? [toCSPR(totalInflow), ...labels.map(e => toCSPR(actorStats[e].actions['inflow'] || 0))]
+      : labels.map(e => toCSPR(actorStats[e].actions['inflow'] || 0));
     chart.data.datasets[1].data = labels.length > 1
-      ? [toCSPR(totalOutflow), ...labels.map(e => toCSPR(exchangeStats[e].outflow_total))]
-      : labels.map(e => toCSPR(exchangeStats[e].outflow_total));
+      ? [toCSPR(totalOutflow), ...labels.map(e => toCSPR(actorStats[e].actions['outflow'] || 0))]
+      : labels.map(e => toCSPR(actorStats[e].actions['outflow'] || 0));
     chart.update();
   }
 
   function refreshStats() {
     const container = document.getElementById('statsContainer');
-    const entries = Object.entries(exchangeStats);
+    const entries = Object.entries(actorStats);
     if (entries.length === 0) {
       container.innerHTML = '<p id="emptyMsg">No data yet — waiting for events.</p>';
       return;
     }
-    const totalInflow = entries.reduce((sum, [, s]) => sum + s.inflow_total, 0);
-    const totalOutflow = entries.reduce((sum, [, s]) => sum + s.outflow_total, 0);
+    const totalInflow = entries.reduce((sum, [, s]) => sum + (s.actions['inflow'] || 0), 0);
+    const totalOutflow = entries.reduce((sum, [, s]) => sum + (s.actions['outflow'] || 0), 0);
     const totalTxCount = entries.reduce((sum, [, s]) => sum + s.tx_count, 0);
     const totalRow = entries.length > 1 ? `
       <div class="stat-row" style="border-bottom:1px solid #4d3f6b;margin-bottom:0.25rem">
@@ -223,9 +223,9 @@
       <div class="stat-row">
         <span class="exchange-name">${name}</span>
         <span>
-          <span style="color:#86efac">+${toCSPR(s.inflow_total)}</span>
+          <span style="color:#86efac">+${toCSPR(s.actions['inflow'] || 0)}</span>
           &nbsp;/&nbsp;
-          <span style="color:#fca5a5">-${toCSPR(s.outflow_total)}</span>
+          <span style="color:#fca5a5">-${toCSPR(s.actions['outflow'] || 0)}</span>
           &nbsp; CSPR &nbsp;
           <span style="color:#94a3b8">(${s.tx_count} tx)</span>
         </span>
@@ -234,16 +234,16 @@
 
   function prependTableRow(record) {
     const tbody = document.getElementById('eventTable');
-    const badge = record.direction === 'inflow'
+    const badge = record.action === 'inflow'
       ? '<span class="badge badge-in">INFLOW</span>'
       : '<span class="badge badge-out">OUTFLOW</span>';
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${formatTime(record.timestamp)}</td>
-      <td><a href="https://cspr.live/account/${record.exchange_address}" target="_blank" rel="noopener" style="color:#c4b5fd;font-weight:600;text-decoration:underline dotted">${record.exchange}</a></td>
+      <td><a href="https://cspr.live/account/${record.actor_address}" target="_blank" rel="noopener" style="color:#c4b5fd;font-weight:600;text-decoration:underline dotted">${record.actor}</a></td>
       <td>${badge}</td>
       <td>${toCSPR(record.amount)}</td>
-      <td class="mono"><a href="https://cspr.live/account/${record.counterparty}" target="_blank" rel="noopener" style="color:#94a3b8;text-decoration:underline dotted">${record.counterparty.slice(0, 20)}…</a></td>
+      <td class="mono"><a href="https://cspr.live/account/${record.target}" target="_blank" rel="noopener" style="color:#94a3b8;text-decoration:underline dotted">${record.target.slice(0, 20)}…</a></td>
       <td><span class="badge ${record.status==='success'?'badge-in':'badge-out'}">${record.status.charAt(0).toUpperCase()+record.status.slice(1)}</span></td>
       <td class="mono"><a href="https://cspr.live/transaction/${record.tx_hash}" target="_blank" rel="noopener" style="color:#94a3b8;text-decoration:underline dotted">${record.tx_hash.slice(0, 12)}…</a></td>`;
     tbody.prepend(row);
@@ -251,16 +251,12 @@
   }
 
   function applyRecord(record) {
-    if (!exchangeStats[record.exchange]) {
-      exchangeStats[record.exchange] = { inflow_total: 0, outflow_total: 0, tx_count: 0 };
+    if (!actorStats[record.actor]) {
+      actorStats[record.actor] = { actions: {}, tx_count: 0 };
     }
-    const s = exchangeStats[record.exchange];
+    const s = actorStats[record.actor];
     s.tx_count += 1;
-    if (record.direction === 'inflow') {
-      s.inflow_total += record.amount;
-    } else {
-      s.outflow_total += record.amount;
-    }
+    s.actions[record.action] = (s.actions[record.action] || 0) + record.amount;
   }
 
   async function bootstrap() {
@@ -268,8 +264,8 @@
       const res = await fetch('/api/stats');
       if (!res.ok) return;
       const data = await res.json();
-      for (const [name, stats] of Object.entries(data.exchanges || {})) {
-        exchangeStats[name] = { ...stats };
+      for (const [name, stats] of Object.entries(data.actors || {})) {
+        actorStats[name] = { ...stats };
       }
       (data.recent_events || []).slice(0, MAX_TABLE_ROWS).reverse().forEach(prependTableRow);
       refreshChart();

@@ -1,5 +1,5 @@
 [package]
-name = "casper-exchange-monitor"
+name = "web-whale-activity"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,4 +7,5 @@ edition = "2024"
 web-dashboard-common = { path = "../web-dashboard-common" }
 casper-event-consumer = { path = "../casper-event-consumer" }
 anyhow = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }

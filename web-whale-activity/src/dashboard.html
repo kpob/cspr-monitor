@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Whale Activity — Casper Network</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --void: #06070b;
+      --plate: #0c0e16;
+      --ridge: #12151f;
+      --shelf: #1a1e2e;
+      --silt: #252a3d;
+      --drift: #3a4060;
+      --foam: #e4e8f7;
+      --mist: #9ca3c2;
+      --slate: #636a8a;
+
+      --transfer: #22d3ee;
+      --transfer-bg: rgba(34,211,238,0.12);
+      --delegate: #a78bfa;
+      --delegate-bg: rgba(167,139,250,0.12);
+      --undelegate: #fb7185;
+      --undelegate-bg: rgba(251,113,133,0.12);
+      --redelegate: #fbbf24;
+      --redelegate-bg: rgba(251,191,36,0.12);
+      --bid: #34d399;
+      --bid-bg: rgba(52,211,153,0.12);
+      --other: #64748b;
+      --other-bg: rgba(100,116,139,0.12);
+
+      --font-body: 'Outfit', sans-serif;
+      --font-data: 'IBM Plex Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 15px; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--void);
+      color: var(--foam);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Subtle grid texture ────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        repeating-linear-gradient(90deg, transparent 0, transparent 79px, rgba(34,211,238,0.018) 79px, rgba(34,211,238,0.018) 80px),
+        repeating-linear-gradient(0deg, transparent 0, transparent 79px, rgba(34,211,238,0.018) 79px, rgba(34,211,238,0.018) 80px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 1.8rem 2.2rem 3rem;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    .hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.6rem;
+      animation: emerge 0.5s ease-out;
+    }
+
+    @keyframes emerge {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .hdr-left {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .hdr-left h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: var(--foam);
+    }
+
+    .hdr-left h1 span { font-size: 1.15rem; }
+
+    .hdr-tag {
+      font-family: var(--font-data);
+      font-size: 0.6rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--slate);
+      background: var(--ridge);
+      border: 1px solid var(--shelf);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+    }
+
+    .conn {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-family: var(--font-data);
+      font-size: 0.65rem;
+      color: var(--slate);
+    }
+
+    .conn-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--transfer);
+      box-shadow: 0 0 6px rgba(34,211,238,0.5);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .conn-dot.off {
+      background: var(--undelegate);
+      box-shadow: 0 0 6px rgba(251,113,133,0.5);
+    }
+
+    /* ── Legend bar ──────────────────────────────── */
+    .legend-bar {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+      margin-bottom: 1.2rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--ridge);
+      animation: emerge 0.5s ease-out 0.1s both;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: var(--font-data);
+      font-size: 0.62rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: var(--mist);
+      cursor: default;
+    }
+
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 2px;
+    }
+
+    .legend-count {
+      font-weight: 600;
+      color: var(--foam);
+      background: var(--shelf);
+      border-radius: 3px;
+      padding: 0.05rem 0.3rem;
+      margin-left: 0.15rem;
+    }
+
+    /* ── Main chart ─────────────────────────────── */
+    .chart-hero {
+      background: linear-gradient(175deg, var(--plate) 0%, var(--void) 100%);
+      border: 1px solid var(--ridge);
+      border-radius: 14px;
+      padding: 1.4rem 1.6rem 1rem;
+      margin-bottom: 1.2rem;
+      position: relative;
+      overflow: hidden;
+      animation: emerge 0.5s ease-out 0.15s both;
+    }
+
+    .chart-hero::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(34,211,238,0.15) 50%, transparent 100%);
+    }
+
+    .chart-hero h2 {
+      font-family: var(--font-data);
+      font-size: 0.58rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: var(--slate);
+      margin-bottom: 1rem;
+    }
+
+    .chart-main { position: relative; height: 340px; }
+
+    /* ── Bottom row: breakdown + stream ──────────── */
+    .bottom-row {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 1.2rem;
+      animation: emerge 0.5s ease-out 0.25s both;
+    }
+
+    @media (max-width: 960px) {
+      .bottom-row { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--plate);
+      border: 1px solid var(--ridge);
+      border-radius: 14px;
+      padding: 1.2rem 1.3rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(34,211,238,0.1) 50%, transparent 100%);
+    }
+
+    .panel h2 {
+      font-family: var(--font-data);
+      font-size: 0.58rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: var(--slate);
+      margin-bottom: 1rem;
+    }
+
+    /* ── Breakdown chart ────────────────────────── */
+    .donut-wrap { position: relative; height: 200px; }
+
+    /* ── Event stream ───────────────────────────── */
+    .stream { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow-y: auto; }
+
+    .stream::-webkit-scrollbar { width: 4px; }
+    .stream::-webkit-scrollbar-track { background: transparent; }
+    .stream::-webkit-scrollbar-thumb { background: var(--shelf); border-radius: 2px; }
+
+    .evt {
+      display: grid;
+      grid-template-columns: 56px 90px 1fr auto 64px;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.45rem 0.6rem;
+      border-radius: 8px;
+      background: var(--ridge);
+      transition: background 0.15s;
+      font-size: 0.78rem;
+    }
+
+    .evt:hover { background: var(--shelf); }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .evt.new { animation: slideIn 0.35s ease-out; }
+
+    .evt-time {
+      font-family: var(--font-data);
+      font-size: 0.62rem;
+      color: var(--slate);
+    }
+
+    .evt-action {
+      font-family: var(--font-data);
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.12rem 0.4rem;
+      border-radius: 4px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .evt-action.transfer     { color: var(--transfer);   background: var(--transfer-bg); }
+    .evt-action.delegation   { color: var(--delegate);    background: var(--delegate-bg); }
+    .evt-action.undelegation { color: var(--undelegate);  background: var(--undelegate-bg); }
+    .evt-action.redelegation { color: var(--redelegate);  background: var(--redelegate-bg); }
+    .evt-action.bid          { color: var(--bid);         background: var(--bid-bg); }
+    .evt-action.other        { color: var(--other);       background: var(--other-bg); }
+
+    .evt-detail {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .evt-addr {
+      font-family: var(--font-data);
+      font-size: 0.65rem;
+      color: var(--mist);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--silt);
+      transition: color 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .evt-addr:hover { color: var(--foam); }
+
+    .evt-arrow {
+      color: var(--drift);
+      font-size: 0.7rem;
+      flex-shrink: 0;
+    }
+
+    .evt-amount {
+      font-family: var(--font-data);
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--foam);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .evt-tx {
+      font-family: var(--font-data);
+      font-size: 0.58rem;
+      color: var(--drift);
+      text-decoration: none;
+      text-align: right;
+      transition: color 0.15s;
+    }
+
+    .evt-tx:hover { color: var(--mist); }
+
+    .empty-msg {
+      color: var(--drift);
+      font-size: 0.8rem;
+      text-align: center;
+      padding: 2rem 0;
+      font-style: italic;
+    }
+
+    /* ── Responsive ─────────────────────────────── */
+    @media (max-width: 640px) {
+      .app { padding: 1rem; }
+      .hdr { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+      .legend-bar { flex-wrap: wrap; gap: 0.6rem; }
+      .chart-main { height: 240px; }
+      .evt { grid-template-columns: 48px 72px 1fr auto; font-size: 0.72rem; }
+      .evt-tx { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <header class="hdr">
+      <div class="hdr-left">
+        <h1><span>&#x1F40B;</span> Whale Activity2222</h1>
+        <span class="hdr-tag">&ge; 100k CSPR</span>
+      </div>
+      <div class="conn">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connText">Connecting&hellip;</span>
+      </div>
+    </header>
+
+    <div class="legend-bar" id="legendBar"></div>
+
+    <div class="chart-hero">
+      <h2>Transaction timeline</h2>
+      <div class="chart-main">
+        <canvas id="mainChart"></canvas>
+      </div>
+    </div>
+
+    <div class="bottom-row">
+      <div class="panel">
+        <h2>Volume by action</h2>
+        <div class="donut-wrap">
+          <canvas id="donutChart"></canvas>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Recent whale movements</h2>
+        <div class="stream" id="stream">
+          <p class="empty-msg" id="emptyMsg">Waiting for whale-sized transactions&hellip;</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+  const M = 1_000_000_000; // motes per CSPR
+
+  const ACTIONS = {
+    native_transfer: { label: 'Transfer',    color: '#22d3ee', cls: 'transfer' },
+    transfer_in:     { label: 'Transfer In',  color: '#22d3ee', cls: 'transfer' },
+    transfer_out:    { label: 'Transfer Out', color: '#22d3ee', cls: 'transfer' },
+    delegation:      { label: 'Delegate',     color: '#a78bfa', cls: 'delegation' },
+    undelegation:    { label: 'Undelegate',   color: '#fb7185', cls: 'undelegation' },
+    redelegation:    { label: 'Redelegate',   color: '#fbbf24', cls: 'redelegation' },
+    add_bid:         { label: 'Add Bid',      color: '#34d399', cls: 'bid' },
+    withdraw_bid:    { label: 'Withdraw Bid', color: '#34d399', cls: 'bid' },
+    activate_bid:    { label: 'Activate Bid', color: '#34d399', cls: 'bid' },
+    session:         { label: 'Session',      color: '#64748b', cls: 'other' },
+  };
+
+  function actionMeta(a) {
+    if (a.startsWith('contract:')) return { label: a.replace('contract:', ''), color: '#64748b', cls: 'other' };
+    return ACTIONS[a] || { label: a, color: '#64748b', cls: 'other' };
+  }
+
+  function cspr(motes) { return (motes / M).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+  function csprNum(motes) { return +(motes / M).toFixed(0); }
+
+  function fmtTime(iso) {
+    try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+    catch (_) { return iso; }
+  }
+
+  function shortAddr(a) {
+    return a.length > 16 ? a.slice(0, 8) + '..' + a.slice(-6) : a;
+  }
+
+  /* ── Timeline chart (scatter) ──────────────── */
+  const allPoints = []; // { x: Date, y: cspr, action, record }
+  const MAX_POINTS = 200;
+
+  const mainCtx = document.getElementById('mainChart').getContext('2d');
+  const mainChart = new Chart(mainCtx, {
+    type: 'bubble',
+    data: { datasets: [] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          type: 'linear',
+          ticks: {
+            color: '#3a4060',
+            font: { family: "'IBM Plex Mono'", size: 10 },
+            callback: v => {
+              const d = new Date(v);
+              return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            },
+            maxTicksLimit: 8,
+          },
+          grid: { color: 'rgba(34,211,238,0.03)' },
+          border: { color: 'rgba(34,211,238,0.06)' },
+        },
+        y: {
+          ticks: {
+            color: '#3a4060',
+            font: { family: "'IBM Plex Mono'", size: 10 },
+            callback: v => v >= 1_000_000 ? (v / 1_000_000).toFixed(0) + 'M' : v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v,
+          },
+          grid: { color: 'rgba(34,211,238,0.03)' },
+          border: { color: 'rgba(34,211,238,0.06)' },
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'CSPR',
+            color: '#3a4060',
+            font: { family: "'IBM Plex Mono'", size: 10, weight: 600 },
+          },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#12151f',
+          borderColor: 'rgba(34,211,238,0.15)',
+          borderWidth: 1,
+          titleFont: { family: "'Outfit'", size: 12 },
+          bodyFont: { family: "'IBM Plex Mono'", size: 11 },
+          cornerRadius: 8,
+          padding: 10,
+          callbacks: {
+            title: items => {
+              if (!items.length) return '';
+              const p = allPoints[items[0].dataIndex];
+              return p ? actionMeta(p.action).label : '';
+            },
+            label: item => {
+              const p = allPoints[item.dataIndex];
+              if (!p) return '';
+              return [
+                `Amount: ${cspr(p.record.amount)} CSPR`,
+                `From: ${shortAddr(p.record.actor_address)}`,
+                `To: ${shortAddr(p.record.target)}`,
+                `Tx: ${p.record.tx_hash.slice(0, 16)}…`,
+              ];
+            },
+          },
+        },
+      },
+    },
+  });
+
+  function rebuildTimeline() {
+    // Group points by action color for dataset layering
+    const groups = {};
+    allPoints.forEach((p, i) => {
+      const meta = actionMeta(p.action);
+      if (!groups[meta.color]) groups[meta.color] = { label: meta.label, color: meta.color, points: [] };
+      const csprVal = csprNum(p.record.amount);
+      groups[meta.color].points.push({ x: p.x, y: csprVal, r: Math.max(4, Math.min(20, Math.sqrt(csprVal / 500) * 3)), _idx: i });
+    });
+
+    mainChart.data.datasets = Object.values(groups).map(g => ({
+      label: g.label,
+      data: g.points,
+      backgroundColor: g.color + '55',
+      borderColor: g.color,
+      borderWidth: 1.5,
+      hoverBackgroundColor: g.color + '88',
+      hoverBorderWidth: 2,
+    }));
+    mainChart.update('none');
+  }
+
+  /* ── Donut chart ───────────────────────────── */
+  const actionTotals = {}; // action -> total motes
+  const donutCtx = document.getElementById('donutChart').getContext('2d');
+  const donutChart = new Chart(donutCtx, {
+    type: 'doughnut',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderColor: '#0c0e16', borderWidth: 2 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#636a8a',
+            font: { family: "'IBM Plex Mono'", size: 10, weight: 500 },
+            boxWidth: 10, boxHeight: 10, borderRadius: 2, useBorderRadius: true, padding: 8,
+          },
+        },
+        tooltip: {
+          backgroundColor: '#12151f',
+          borderColor: 'rgba(34,211,238,0.15)',
+          borderWidth: 1,
+          bodyFont: { family: "'IBM Plex Mono'", size: 11 },
+          cornerRadius: 8,
+          callbacks: {
+            label: item => ` ${item.label}: ${cspr(item.raw * M)} CSPR`,
+          },
+        },
+      },
+    },
+  });
+
+  function rebuildDonut() {
+    const entries = Object.entries(actionTotals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    donutChart.data.labels = entries.map(([a]) => actionMeta(a).label);
+    donutChart.data.datasets[0].data = entries.map(([, v]) => csprNum(v));
+    donutChart.data.datasets[0].backgroundColor = entries.map(([a]) => actionMeta(a).color + '99');
+    donutChart.update('none');
+  }
+
+  /* ── Legend bar ────────────────────────────── */
+  const actionCounts = {};
+
+  function refreshLegend() {
+    const bar = document.getElementById('legendBar');
+    const entries = Object.entries(actionCounts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
+    bar.innerHTML = entries.map(([a, count]) => {
+      const m = actionMeta(a);
+      return `<span class="legend-item"><span class="legend-dot" style="background:${m.color}"></span>${m.label}<span class="legend-count">${count}</span></span>`;
+    }).join('');
+  }
+
+  /* ── Event stream ──────────────────────────── */
+  const MAX_STREAM = 30;
+
+  function addStreamEvent(record, animate) {
+    const el = document.getElementById('stream');
+    const empty = document.getElementById('emptyMsg');
+    if (empty) empty.remove();
+
+    const m = actionMeta(record.action);
+    const div = document.createElement('div');
+    div.className = 'evt' + (animate ? ' new' : '');
+    div.innerHTML = `
+      <span class="evt-time">${fmtTime(record.timestamp)}</span>
+      <span class="evt-action ${m.cls}">${m.label}</span>
+      <span class="evt-detail">
+        <a class="evt-addr" href="https://cspr.live/account/${record.actor_address}" target="_blank" rel="noopener">${shortAddr(record.actor_address)}</a>
+        <span class="evt-arrow">&rarr;</span>
+        <a class="evt-addr" href="https://cspr.live/account/${record.target}" target="_blank" rel="noopener">${record.target === 'self' ? 'self' : shortAddr(record.target)}</a>
+      </span>
+      <span class="evt-amount">${cspr(record.amount)}</span>
+      <a class="evt-tx" href="https://cspr.live/transaction/${record.tx_hash}" target="_blank" rel="noopener">${record.tx_hash.slice(0, 10)}&hellip;</a>`;
+    el.prepend(div);
+    while (el.children.length > MAX_STREAM) el.removeChild(el.lastChild);
+  }
+
+  /* ── Apply record ──────────────────────────── */
+  function applyRecord(record) {
+    const ts = new Date(record.timestamp).getTime() || Date.now();
+    allPoints.push({ x: ts, y: csprNum(record.amount), action: record.action, record });
+    if (allPoints.length > MAX_POINTS) allPoints.shift();
+
+    actionTotals[record.action] = (actionTotals[record.action] || 0) + record.amount;
+    actionCounts[record.action] = (actionCounts[record.action] || 0) + 1;
+  }
+
+  /* ── Bootstrap ─────────────────────────────── */
+  async function bootstrap() {
+    try {
+      const res = await fetch('/api/stats');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Rebuild action totals from actor stats
+      for (const [, stats] of Object.entries(data.actors || {})) {
+        for (const [action, amount] of Object.entries(stats.actions || {})) {
+          actionTotals[action] = (actionTotals[action] || 0) + amount;
+          actionCounts[action] = (actionCounts[action] || 0) + stats.tx_count;
+        }
+      }
+
+      // Load recent events into timeline + stream
+      const events = (data.recent_events || []).slice(0, MAX_STREAM);
+      events.reverse().forEach(r => {
+        applyRecord(r);
+        addStreamEvent(r, false);
+      });
+
+      rebuildTimeline();
+      rebuildDonut();
+      refreshLegend();
+    } catch (e) {
+      console.warn('Bootstrap failed:', e);
+    }
+  }
+
+  /* ── SSE ───────────────────────────────────── */
+  let sse = null;
+  let reconnectDelay = 1000;
+  const dot = document.getElementById('connDot');
+  const txt = document.getElementById('connText');
+
+  function connectSSE() {
+    if (sse) sse.close();
+    sse = new EventSource('/events');
+    sse.onopen = () => {
+      dot.classList.remove('off');
+      txt.textContent = 'Live';
+      reconnectDelay = 1000;
+    };
+    sse.onmessage = (e) => {
+      let record;
+      try { record = JSON.parse(e.data); } catch (_) { return; }
+      applyRecord(record);
+      addStreamEvent(record, true);
+      rebuildTimeline();
+      rebuildDonut();
+      refreshLegend();
+    };
+    sse.onerror = () => {
+      dot.classList.add('off');
+      txt.textContent = 'Reconnecting\u2026';
+      sse.close();
+      setTimeout(() => {
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        connectSSE();
+      }, reconnectDelay);
+    };
+  }
+
+  bootstrap().then(() => connectSSE());
+  </script>
+</body>
+</html>

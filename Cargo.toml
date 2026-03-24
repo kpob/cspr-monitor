@@ -8,6 +8,8 @@ members = [
     "casper-exchange-monitor",
     "casper-ingestion",
     "casper-simulator",
+    "web-dashboard-common",
+    "web-whale-activity",
 ]
 
 [workspace.dependencies]

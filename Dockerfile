@@ -16,11 +16,14 @@ COPY casper-event-router/ casper-event-router/
 COPY casper-exchange-monitor/ casper-exchange-monitor/
 COPY casper-ingestion/ casper-ingestion/
 COPY casper-simulator/ casper-simulator/
+COPY web-dashboard-common/ web-dashboard-common/
+COPY web-whale-activity/ web-whale-activity/
 
 RUN cargo +nightly build --release \
     --bin casper-ingestion \
     --bin casper-event-router \
     --bin casper-exchange-monitor \
+    --bin web-whale-activity \
     --bin simulator
 
 FROM debian:bookworm-slim
@@ -42,4 +45,5 @@ COPY casper-event-router/config/ config/
 COPY --from=builder /app/target/release/casper-ingestion /usr/local/bin/ingestion
 COPY --from=builder /app/target/release/casper-event-router /usr/local/bin/event-router
 COPY --from=builder /app/target/release/casper-exchange-monitor /usr/local/bin/exchange-monitor
+COPY --from=builder /app/target/release/web-whale-activity /usr/local/bin/whale-activity
 COPY --from=builder /app/target/release/simulator /usr/local/bin/simulator

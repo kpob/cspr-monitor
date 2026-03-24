@@ -413,19 +413,9 @@ name = "casper-exchange-monitor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
- "axum",
- "casper-common",
  "casper-event-consumer",
- "dotenv",
- "futures-util",
- "metrics",
- "serde",
- "serde_json",
  "tokio",
- "tokio-stream",
- "tracing",
- "tracing-subscriber",
+ "web-dashboard-common",
 ]
 
 [[package]]
@@ -4236,6 +4226,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-dashboard-common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "casper-common",
+ "casper-event-consumer",
+ "dotenv",
+ "futures-util",
+ "metrics",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
 name = "web-sys"
 version = "0.3.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4253,6 +4262,17 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "web-whale-activity"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "casper-event-consumer",
+ "serde_json",
+ "tokio",
+ "web-dashboard-common",
 ]
 
 [[package]]
