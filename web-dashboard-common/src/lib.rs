@@ -1,23 +1,38 @@
 use anyhow::Result;
+use axum::routing::get;
 use axum::{
     Router,
     extract::State,
-    response::{Html, Json},
-    routing::get,
+    response::Json,
 };
 use axum::response::sse::{Event, KeepAlive, Sse};
 use casper_event_consumer::{EnrichedEvent, EventConsumer, EventHandler};
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
+use tower_http::services::ServeDir;
 use std::{
-    collections::{HashMap, VecDeque},
-    convert::Infallible,
-    sync::Arc,
+    collections::{HashMap, VecDeque}, convert::Infallible, marker::PhantomData, sync::Arc
 };
 use tokio::sync::{broadcast, Mutex};
 use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::BroadcastStream;
 
+pub mod utils;
+
+pub trait UiRouter {
+    fn ui() -> Router<AppState>;
+}
+
+pub trait ApiRouter {
+    fn base_api() -> Router<AppState> {
+        Router::new()
+            .route("/api/stats", get(stats_handler))
+    }
+
+    fn api() -> Router<AppState> {
+        Self::base_api()
+    }
+}
 // ── Event mapper trait ──────────────────────────────────────────────────────
 
 pub trait EventMapper: Send + Sync + 'static {
@@ -26,15 +41,16 @@ pub trait EventMapper: Send + Sync + 'static {
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-pub struct DashboardConfig<M: EventMapper> {
+pub struct DashboardConfig<M: EventMapper, U: UiRouter, A: ApiRouter> {
     pub service_name: &'static str,
     pub web_port: u16,
     pub prometheus_port: u16,
     pub metric_name: &'static str,
     pub topics: Vec<&'static str>,
     pub group_id: &'static str,
-    pub dashboard_html: &'static str,
     pub mapper: M,
+    pub _ui: PhantomData<U>,
+    pub _api: PhantomData<A>
 }
 
 // ── Shared state types ──────────────────────────────────────────────────────
@@ -63,9 +79,9 @@ struct StatsResponse {
     recent_events: Vec<EventRecord>,
 }
 
-struct DashboardState {
-    events: VecDeque<EventRecord>,
-    stats: HashMap<String, ActorStats>,
+pub struct DashboardState {
+    pub events: VecDeque<EventRecord>,
+    pub stats: HashMap<String, ActorStats>,
 }
 
 impl DashboardState {
@@ -88,10 +104,9 @@ impl DashboardState {
 // ── Axum app state ───────────────────────────────────────────────────────────
 
 #[derive(Clone)]
-struct AppState {
+pub struct AppState {
     broadcast_tx: broadcast::Sender<EventRecord>,
-    state: Arc<Mutex<DashboardState>>,
-    dashboard_html: &'static str,
+    pub state: Arc<Mutex<DashboardState>>,
     service_name: &'static str,
 }
 
@@ -139,11 +154,6 @@ impl<M: EventMapper> EventHandler for DashboardHandler<M> {
 }
 
 // ── HTTP handlers ────────────────────────────────────────────────────────────
-
-async fn index_handler(State(app): State<AppState>) -> Html<&'static str> {
-    Html(app.dashboard_html)
-}
-
 async fn health_handler(State(app): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({"status": "ok", "service": app.service_name}))
 }
@@ -170,26 +180,25 @@ async fn sse_handler(
 }
 
 // ── Web server ───────────────────────────────────────────────────────────────
-
-async fn start_web_server(
+async fn start_web_server<U: UiRouter, A: ApiRouter>(
     broadcast_tx: broadcast::Sender<EventRecord>,
     state: Arc<Mutex<DashboardState>>,
-    dashboard_html: &'static str,
     service_name: &'static str,
     web_port: u16,
 ) -> Result<()> {
     let app_state = AppState {
         broadcast_tx,
         state,
-        dashboard_html,
         service_name,
     };
+
     let router = Router::new()
-        .route("/", get(index_handler))
         .route("/health", get(health_handler))
-        .route("/api/stats", get(stats_handler))
         .route("/events", get(sse_handler))
-        .with_state(app_state);
+        .merge(U::ui())
+        .merge(A::api())
+        .with_state(app_state)
+        .nest_service("/static", ServeDir::new("/app/static"));
 
     let addr = format!("0.0.0.0:{}", web_port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -200,25 +209,22 @@ async fn start_web_server(
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
-pub async fn run_dashboard<M: EventMapper>(config: DashboardConfig<M>) -> Result<()> {
+pub async fn run_dashboard<M: EventMapper, U: UiRouter, A: ApiRouter>(config: DashboardConfig<M, U, A>) -> Result<()> {
     dotenv::dotenv().ok();
     casper_common::init_tracing();
-
     tracing::info!("Starting {}", config.service_name);
-
     casper_common::metrics::install_prometheus_exporter(config.prometheus_port);
 
     let (broadcast_tx, _) = broadcast::channel::<EventRecord>(100);
     let dashboard_state = Arc::new(Mutex::new(DashboardState::new()));
-
     {
         let tx = broadcast_tx.clone();
         let state = Arc::clone(&dashboard_state);
         let web_port = config.web_port;
-        let dashboard_html = config.dashboard_html;
+    
         let service_name = config.service_name;
         tokio::spawn(async move {
-            if let Err(e) = start_web_server(tx, state, dashboard_html, service_name, web_port).await {
+            if let Err(e) = start_web_server::<U, A>(tx, state, service_name, web_port).await {
                 tracing::error!("Web server error: {}", e);
             }
         });

@@ -8,3 +8,4 @@ web-dashboard-common = { path = "../web-dashboard-common" }
 casper-event-consumer = { path = "../casper-event-consumer" }
 anyhow = { workspace = true }
 tokio = { workspace = true }
+axum = { workspace = true }

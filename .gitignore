@@ -3,3 +3,4 @@
 .nctl/**
 casper-simulator/*.txt
 .env.prod
+.claude-tool-logs/

@@ -9,3 +9,5 @@ casper-event-consumer = { path = "../casper-event-consumer" }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }

@@ -46,4 +46,5 @@ COPY --from=builder /app/target/release/casper-ingestion /usr/local/bin/ingestio
 COPY --from=builder /app/target/release/casper-event-router /usr/local/bin/event-router
 COPY --from=builder /app/target/release/casper-exchange-monitor /usr/local/bin/exchange-monitor
 COPY --from=builder /app/target/release/web-whale-activity /usr/local/bin/whale-activity
+COPY --from=builder /app/web-whale-activity/static /app/static
 COPY --from=builder /app/target/release/simulator /usr/local/bin/simulator

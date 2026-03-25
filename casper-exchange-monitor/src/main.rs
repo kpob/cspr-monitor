@@ -1,5 +1,20 @@
+use std::marker::PhantomData;
+
 use anyhow::Result;
-use web_dashboard_common::{DashboardConfig, EventMapper, EventRecord};
+use axum::{Router, response::Html, routing::get};
+use web_dashboard_common::{ApiRouter, DashboardConfig, EventMapper, EventRecord, UiRouter};
+
+struct Routers;
+
+impl UiRouter for Routers {
+    fn ui() -> Router<web_dashboard_common::AppState> {
+        Router::new().route("/", get(async || Html(include_str!("dashboard.html"))))
+    }
+}
+
+impl ApiRouter for Routers {
+
+}
 
 struct ExchangeMapper {
     filter: Option<String>,
@@ -54,8 +69,9 @@ async fn main() -> Result<()> {
         metric_name: "casper_exchange_events_total",
         topics: vec!["apps.exchanges"],
         group_id: "exchange-monitor-v1",
-        dashboard_html: include_str!("dashboard.html"),
         mapper: ExchangeMapper { filter },
+        _api: PhantomData::<Routers>,
+        _ui: PhantomData::<Routers>
     })
     .await
 }
