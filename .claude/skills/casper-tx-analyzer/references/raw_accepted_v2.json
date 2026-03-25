@@ -1,0 +1,460 @@
+{
+    "$schema": "https://json-schema.org/draft-07/schema#",
+    "title": "TransactionV1",
+    "description": "A versioned transaction (V1) on the Casper network.",
+    "type": "object",
+    "required": ["hash", "payload", "approvals"],
+    "additionalProperties": false,
+    "properties": {
+      "hash": {
+        "type": "string",
+        "description": "Hex-encoded TransactionV1 hash (64 hex characters).",
+        "pattern": "^[0-9a-fA-F]{64}$"
+      },
+      "payload": {
+        "$ref": "#/$defs/TransactionV1Payload"
+      },
+      "approvals": {
+        "type": "array",
+        "description": "Set of approvals (signatures) for this transaction.",
+        "items": {
+          "$ref": "#/$defs/Approval"
+        },
+        "uniqueItems": true
+      }
+    },
+    "$defs": {
+      "TransactionV1Payload": {
+        "type": "object",
+        "description": "The payload of a TransactionV1.",
+        "required": ["initiator_addr", "timestamp", "ttl", "chain_name", "pricing_mode", "fields"],
+        "additionalProperties": false,
+        "properties": {
+          "initiator_addr": {
+            "$ref": "#/$defs/InitiatorAddr"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "Timestamp formatted as per RFC 3339.",
+            "format": "date-time"
+          },
+          "ttl": {
+            "type": "string",
+            "description": "Duration in ISO 8601 format (e.g. 'PT1M30S')."
+          },
+          "chain_name": {
+            "type": "string",
+            "description": "Name of the chain (e.g. 'casper', 'casper-test')."
+          },
+          "pricing_mode": {
+            "$ref": "#/$defs/PricingMode"
+          },
+          "fields": {
+            "type": "object",
+            "description": "Transaction fields: args, target, entry_point, scheduling.",
+            "required": ["args", "target", "entry_point", "scheduling"],
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "$ref": "#/$defs/TransactionArgs"
+              },
+              "target": {
+                "$ref": "#/$defs/TransactionTarget"
+              },
+              "entry_point": {
+                "$ref": "#/$defs/TransactionEntryPoint"
+              },
+              "scheduling": {
+                "$ref": "#/$defs/TransactionScheduling"
+              }
+            }
+          }
+        }
+      },
+      "InitiatorAddr": {
+        "description": "The address of the initiator of a TransactionV1.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["PublicKey"],
+            "additionalProperties": false,
+            "properties": {
+              "PublicKey": {
+                "type": "string",
+                "description": "Hex-encoded public key with algorithm prefix (01 = Ed25519, 02 = Secp256k1)."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["AccountHash"],
+            "additionalProperties": false,
+            "properties": {
+              "AccountHash": {
+                "type": "string",
+                "description": "Hex-encoded account hash prefixed with 'account-hash-'."
+              }
+            }
+          }
+        ]
+      },
+      "PricingMode": {
+        "description": "Pricing mode of a Transaction.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["PaymentLimited"],
+            "additionalProperties": false,
+            "properties": {
+              "PaymentLimited": {
+                "type": "object",
+                "required": ["payment_amount", "gas_price_tolerance", "standard_payment"],
+                "additionalProperties": false,
+                "properties": {
+                  "payment_amount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "User-specified payment amount."
+                  },
+                  "gas_price_tolerance": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 255,
+                    "description": "User-specified gas price tolerance (minimum 1)."
+                  },
+                  "standard_payment": {
+                    "type": "boolean",
+                    "description": "Standard payment flag."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Fixed"],
+            "additionalProperties": false,
+            "properties": {
+              "Fixed": {
+                "type": "object",
+                "required": ["additional_computation_factor", "gas_price_tolerance"],
+                "additionalProperties": false,
+                "properties": {
+                  "additional_computation_factor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255,
+                    "description": "Additional computation factor (minimum 0)."
+                  },
+                  "gas_price_tolerance": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 255,
+                    "description": "User-specified gas price tolerance (minimum 1)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Prepaid"],
+            "additionalProperties": false,
+            "properties": {
+              "Prepaid": {
+                "type": "object",
+                "required": ["receipt"],
+                "additionalProperties": false,
+                "properties": {
+                  "receipt": {
+                    "type": "string",
+                    "description": "Hex-encoded pre-paid receipt hash.",
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TransactionArgs": {
+        "description": "The arguments of a transaction.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["Named"],
+            "additionalProperties": false,
+            "properties": {
+              "Named": {
+                "$ref": "#/$defs/RuntimeArgs"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Bytesrepr"],
+            "additionalProperties": false,
+            "properties": {
+              "Bytesrepr": {
+                "type": "string",
+                "description": "Hex-encoded or base64-encoded bytes."
+              }
+            }
+          }
+        ]
+      },
+      "RuntimeArgs": {
+        "type": "array",
+        "description": "Runtime arguments as a list of named args.",
+        "items": {
+          "type": "array",
+          "description": "A [name, CLValue] pair.",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": [
+            {
+              "type": "string",
+              "description": "Argument name."
+            },
+            {
+              "$ref": "#/$defs/CLValue"
+            }
+          ]
+        }
+      },
+      "CLValue": {
+        "type": "object",
+        "description": "A CasperLabs value with type information.",
+        "required": ["cl_type", "bytes"],
+        "additionalProperties": false,
+        "properties": {
+          "cl_type": {
+            "description": "The CL type of this value."
+          },
+          "bytes": {
+            "type": "string",
+            "description": "Hex-encoded bytes of the value."
+          },
+          "parsed": {
+            "description": "Optional parsed representation of the value."
+          }
+        }
+      },
+      "TransactionTarget": {
+        "description": "The execution target of a transaction.",
+        "oneOf": [
+          {
+            "type": "string",
+            "const": "Native"
+          },
+          {
+            "type": "object",
+            "required": ["Stored"],
+            "additionalProperties": false,
+            "properties": {
+              "Stored": {
+                "type": "object",
+                "required": ["id", "runtime"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/TransactionInvocationTarget"
+                  },
+                  "runtime": {
+                    "$ref": "#/$defs/TransactionRuntimeParams"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Session"],
+            "additionalProperties": false,
+            "properties": {
+              "Session": {
+                "type": "object",
+                "required": ["is_install_upgrade", "module_bytes", "runtime"],
+                "additionalProperties": false,
+                "properties": {
+                  "is_install_upgrade": {
+                    "type": "boolean",
+                    "description": "Whether the Wasm is an install/upgrade."
+                  },
+                  "module_bytes": {
+                    "type": "string",
+                    "description": "Hex-encoded compiled Wasm module bytes."
+                  },
+                  "runtime": {
+                    "$ref": "#/$defs/TransactionRuntimeParams"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TransactionInvocationTarget": {
+        "description": "Identifier of a stored transaction target.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["ByHash"],
+            "additionalProperties": false,
+            "properties": {
+              "ByHash": {
+                "type": "string",
+                "description": "Hex-encoded entity address (64 hex characters).",
+                "pattern": "^[0-9a-fA-F]{64}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["ByName"],
+            "additionalProperties": false,
+            "properties": {
+              "ByName": {
+                "type": "string",
+                "description": "Alias identifying the invocable entity."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["ByPackageHash"],
+            "additionalProperties": false,
+            "properties": {
+              "ByPackageHash": {
+                "type": "object",
+                "required": ["addr", "version"],
+                "additionalProperties": false,
+                "properties": {
+                  "addr": {
+                    "type": "string",
+                    "description": "Hex-encoded package address (64 hex characters).",
+                    "pattern": "^[0-9a-fA-F]{64}$"
+                  },
+                  "version": {
+                    "type": ["integer", "null"],
+                    "description": "Package version. Null implies latest enabled version."
+                  },
+                  "protocol_version_major": {
+                    "type": ["integer", "null"],
+                    "description": "Major protocol version. Omitted or null implies latest."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["ByPackageName"],
+            "additionalProperties": false,
+            "properties": {
+              "ByPackageName": {
+                "type": "object",
+                "required": ["name", "version"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Package name."
+                  },
+                  "version": {
+                    "type": ["integer", "null"],
+                    "description": "Package version. Null implies latest enabled version."
+                  },
+                  "protocol_version_major": {
+                    "type": ["integer", "null"],
+                    "description": "Major protocol version. Omitted or null implies latest."
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TransactionRuntimeParams": {
+        "description": "Runtime parameters of a transaction target.",
+        "oneOf": [
+          {
+            "type": "string",
+            "const": "VmCasperV1"
+          },
+          {
+            "type": "object",
+            "required": ["VmCasperV2"],
+            "additionalProperties": false,
+            "properties": {
+              "VmCasperV2": {
+                "type": "object",
+                "required": ["transferred_value", "seed"],
+                "additionalProperties": false,
+                "properties": {
+                  "transferred_value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Amount of motes to transfer before code execution."
+                  },
+                  "seed": {
+                    "type": ["string", "null"],
+                    "description": "Hex-encoded 32-byte seed for session code. Null if not specified."
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TransactionEntryPoint": {
+        "description": "Entry point of a Transaction.",
+        "oneOf": [
+          { "type": "string", "const": "Call" },
+          {
+            "type": "object",
+            "required": ["Custom"],
+            "additionalProperties": false,
+            "properties": {
+              "Custom": {
+                "type": "string",
+                "description": "A non-native, arbitrary entry point name."
+              }
+            }
+          },
+          { "type": "string", "const": "Transfer" },
+          { "type": "string", "const": "Burn" },
+          { "type": "string", "const": "AddBid" },
+          { "type": "string", "const": "WithdrawBid" },
+          { "type": "string", "const": "Delegate" },
+          { "type": "string", "const": "Undelegate" },
+          { "type": "string", "const": "Redelegate" },
+          { "type": "string", "const": "ActivateBid" },
+          { "type": "string", "const": "ChangeBidPublicKey" },
+          { "type": "string", "const": "AddReservations" },
+          { "type": "string", "const": "CancelReservations" }
+        ]
+      },
+      "TransactionScheduling": {
+        "description": "Scheduling mode of a Transaction.",
+        "type": "string",
+        "enum": ["Standard"]
+      },
+      "Approval": {
+        "type": "object",
+        "description": "An approval of a transaction.",
+        "required": ["signer", "signature"],
+        "additionalProperties": false,
+        "properties": {
+          "signer": {
+            "type": "string",
+            "description": "Hex-encoded public key with algorithm prefix (01 = Ed25519, 02 = Secp256k1)."
+          },
+          "signature": {
+            "type": "string",
+            "description": "Hex-encoded signature with algorithm prefix (01 = Ed25519, 02 = Secp256k1)."
+          }
+        }
+      }
+    }
+}

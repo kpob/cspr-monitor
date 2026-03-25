@@ -1,0 +1,163 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "ExecutionResultV2",
+    "description": "The result of executing a single transaction.",
+    "type": "object",
+    "required": [
+        "initiator",
+        "error_message",
+        "current_price",
+        "limit",
+        "consumed",
+        "cost",
+        "refund",
+        "transfers",
+        "size_estimate",
+        "effects"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "initiator": {
+        "description": "Who initiated this transaction.",
+        "oneOf": [
+            {
+            "type": "object",
+            "required": ["PublicKey"],
+            "additionalProperties": false,
+            "properties": {
+                "PublicKey": { "type": "string" }
+            }
+            },
+            {
+            "type": "object",
+            "required": ["AccountHash"],
+            "additionalProperties": false,
+            "properties": {
+                "AccountHash": { "type": "string" }
+            }
+            }
+        ]
+        },
+        "error_message": {
+        "description": "If null, this execution was processed successfully. If a string, this execution failed for the stated reason.",
+        "type": ["string", "null"]
+        },
+        "current_price": {
+        "description": "The current gas price, i.e. how many motes are charged for each unit of computation.",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255
+        },
+        "limit": {
+        "description": "The maximum allowed gas limit for this transaction.",
+        "type": "string",
+        "pattern": "^[0-9]+$"
+        },
+        "consumed": {
+        "description": "How much gas was consumed executing this transaction.",
+        "type": "string",
+        "pattern": "^[0-9]+$"
+        },
+        "cost": {
+        "description": "How much was paid for this transaction.",
+        "type": "string",
+        "pattern": "^[0-9]+$"
+        },
+        "refund": {
+        "description": "How much unconsumed gas was refunded (if any).",
+        "type": "string",
+        "pattern": "^[0-9]+$"
+        },
+        "transfers": {
+        "description": "A record of transfers performed while executing this transaction.",
+        "type": "array",
+        "items": {
+            "oneOf": [
+            {
+                "type": "object",
+                "required": ["Version1"],
+                "additionalProperties": false,
+                "properties": {
+                "Version1": { "$ref": "#/$defs/TransferV1" }
+                }
+            },
+            {
+                "type": "object",
+                "required": ["Version2"],
+                "additionalProperties": false,
+                "properties": {
+                "Version2": { "$ref": "#/$defs/TransferV2" }
+                }
+            }
+            ]
+        }
+        },
+        "size_estimate": {
+        "description": "The size estimate of the transaction.",
+        "type": "integer",
+        "minimum": 0
+        },
+        "effects": {
+        "description": "The effects of executing this transaction.",
+        "type": "array",
+        "items": { "$ref": "#/$defs/TransformV2" }
+        }
+    },
+    "$defs": {
+        "TransferV1": {
+        "type": "object",
+        "required": ["deploy_hash", "from", "source", "target", "amount", "gas"],
+        "properties": {
+            "deploy_hash": { "type": "string", "description": "The deploy hash." },
+            "from": { "type": "string", "description": "The source account hash." },
+            "to": { "type": ["string", "null"], "description": "The target account hash, if any." },
+            "source": { "type": "string", "description": "The source URef." },
+            "target": { "type": "string", "description": "The target URef." },
+            "amount": { "type": "string", "pattern": "^[0-9]+$", "description": "The transfer amount." },
+            "gas": { "type": "string", "pattern": "^[0-9]+$", "description": "The gas used." },
+            "id": { "type": ["integer", "null"], "description": "User-defined transfer id." }
+        },
+        "additionalProperties": false
+        },
+        "TransferV2": {
+        "type": "object",
+        "required": ["transaction_hash", "from", "source", "target", "amount", "gas"],
+        "properties": {
+            "transaction_hash": { "type": "string", "description": "The transaction hash." },
+            "from": {
+            "description": "The initiator address.",
+            "oneOf": [
+                {
+                "type": "object",
+                "required": ["PublicKey"],
+                "additionalProperties": false,
+                "properties": { "PublicKey": { "type": "string" } }
+                },
+                {
+                "type": "object",
+                "required": ["AccountHash"],
+                "additionalProperties": false,
+                "properties": { "AccountHash": { "type": "string" } }
+                }
+            ]
+            },
+            "to": { "type": ["string", "null"], "description": "The target account hash, if any." },
+            "source": { "type": "string", "description": "The source URef." },
+            "target": { "type": "string", "description": "The target URef." },
+            "amount": { "type": "string", "pattern": "^[0-9]+$", "description": "The transfer amount." },
+            "gas": { "type": "string", "pattern": "^[0-9]+$", "description": "The gas consumed." },
+            "id": { "type": ["integer", "null"], "description": "User-defined transfer id." }
+        },
+        "additionalProperties": false
+        },
+        "TransformV2": {
+        "type": "object",
+        "required": ["key", "kind"],
+        "properties": {
+            "key": { "type": "string", "description": "The state key affected." },
+            "kind": { "description": "The type of transformation.", "type": ["string", "object"] }
+        },
+        "additionalProperties": false
+        }
+    }
+}

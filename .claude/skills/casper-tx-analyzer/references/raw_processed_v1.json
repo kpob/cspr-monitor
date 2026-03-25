@@ -1,0 +1,293 @@
+  {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ExecutionResultV1",
+    "description": "The result of executing a single deploy.",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": ["Failure"],
+        "properties": {
+          "Failure": {
+            "type": "object",
+            "required": ["effect", "transfers", "cost", "error_message"],
+            "properties": {
+              "effect": { "$ref": "#/$defs/ExecutionEffect" },
+              "transfers": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/TransferAddr" }
+              },
+              "cost": { "$ref": "#/$defs/U512" },
+              "error_message": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": ["Success"],
+        "properties": {
+          "Success": {
+            "type": "object",
+            "required": ["effect", "transfers", "cost"],
+            "properties": {
+              "effect": { "$ref": "#/$defs/ExecutionEffect" },
+              "transfers": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/TransferAddr" }
+              },
+              "cost": { "$ref": "#/$defs/U512" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ],
+    "$defs": {
+      "ExecutionEffect": {
+        "description": "The sequence of execution transforms from a single deploy.",
+        "type": "object",
+        "required": ["operations", "transforms"],
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/Operation" }
+          },
+          "transforms": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/TransformV1" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operation": {
+        "description": "An operation performed while executing a deploy.",
+        "type": "object",
+        "required": ["key", "kind"],
+        "properties": {
+          "key": { "type": "string", "description": "The formatted string of the Key." },
+          "kind": { "$ref": "#/$defs/OpKind" }
+        },
+        "additionalProperties": false
+      },
+      "OpKind": {
+        "description": "The type of operation performed while executing a deploy.",
+        "type": "string",
+        "enum": ["Read", "Write", "Add", "NoOp", "Prune"]
+      },
+      "TransformV1": {
+        "description": "A transformation performed while executing a deploy.",
+        "type": "object",
+        "required": ["key", "transform"],
+        "properties": {
+          "key": { "type": "string", "description": "The formatted string of the Key." },
+          "transform": { "$ref": "#/$defs/TransformKindV1" }
+        },
+        "additionalProperties": false
+      },
+      "TransformKindV1": {
+        "description": "The actual transformation performed while executing a deploy.",
+        "oneOf": [
+          { "type": "string", "const": "Identity" },
+          {
+            "type": "object",
+            "required": ["WriteCLValue"],
+            "properties": { "WriteCLValue": { "$ref": "#/$defs/CLValue" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["WriteAccount"],
+            "properties": { "WriteAccount": { "$ref": "#/$defs/AccountHash" } },
+            "additionalProperties": false
+          },
+          { "type": "string", "const": "WriteContractWasm" },
+          { "type": "string", "const": "WriteContract" },
+          { "type": "string", "const": "WriteContractPackage" },
+          {
+            "type": "object",
+            "required": ["WriteDeployInfo"],
+            "properties": { "WriteDeployInfo": { "$ref": "#/$defs/DeployInfo" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["WriteEraInfo"],
+            "properties": { "WriteEraInfo": { "$ref": "#/$defs/EraInfo" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["WriteTransfer"],
+            "properties": { "WriteTransfer": { "$ref": "#/$defs/TransferV1" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["WriteBid"],
+            "properties": { "WriteBid": { "$ref": "#/$defs/Bid" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["WriteWithdraw"],
+            "properties": {
+              "WriteWithdraw": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/WithdrawPurse" }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["AddInt32"],
+            "properties": { "AddInt32": { "type": "integer", "format": "int32" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["AddUInt64"],
+            "properties": { "AddUInt64": { "type": "integer", "format": "uint64" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["AddUInt128"],
+            "properties": { "AddUInt128": { "$ref": "#/$defs/U128" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["AddUInt256"],
+            "properties": { "AddUInt256": { "$ref": "#/$defs/U256" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["AddUInt512"],
+            "properties": { "AddUInt512": { "$ref": "#/$defs/U512" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["AddKeys"],
+            "properties": {
+              "AddKeys": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/NamedKey" }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["Failure"],
+            "properties": { "Failure": { "type": "string" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["WriteUnbonding"],
+            "properties": {
+              "WriteUnbonding": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/UnbondingPurse" }
+              }
+            },
+            "additionalProperties": false
+          },
+          { "type": "string", "const": "WriteAddressableEntity" },
+          {
+            "type": "object",
+            "required": ["Prune"],
+            "properties": { "Prune": { "$ref": "#/$defs/Key" } },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["WriteBidKind"],
+            "properties": { "WriteBidKind": { "$ref": "#/$defs/BidKind" } },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "NamedKey": {
+        "description": "A key with a name.",
+        "type": "object",
+        "required": ["name", "key"],
+        "properties": {
+          "name": { "type": "string" },
+          "key": { "type": "string", "description": "A casper Key type as a formatted string." }
+        },
+        "additionalProperties": false
+      },
+      "U512": {
+        "description": "A 512-bit unsigned integer, serialized as a decimal string.",
+        "type": "string",
+        "pattern": "^[0-9]+$"
+      },
+      "U256": {
+        "description": "A 256-bit unsigned integer, serialized as a decimal string.",
+        "type": "string",
+        "pattern": "^[0-9]+$"
+      },
+      "U128": {
+        "description": "A 128-bit unsigned integer, serialized as a decimal string.",
+        "type": "string",
+        "pattern": "^[0-9]+$"
+      },
+      "TransferAddr": {
+        "description": "A version 1 transfer address (hex-encoded 32-byte hash).",
+        "type": "string"
+      },
+      "AccountHash": {
+        "description": "A 32-byte account hash, hex-encoded.",
+        "type": "string"
+      },
+      "Key": {
+        "description": "A Casper global state key.",
+        "type": "string"
+      },
+      "CLValue": {
+        "description": "A CasperLabs value with type information.",
+        "type": "object",
+        "required": ["cl_type", "bytes", "parsed"],
+        "properties": {
+          "cl_type": { "description": "The CL type of the value." },
+          "bytes": { "type": "string", "description": "Hex-encoded bytes of the value." },
+          "parsed": { "description": "The parsed JSON representation of the value." }
+        }
+      },
+      "DeployInfo": {
+        "description": "Information relating to the given deploy.",
+        "type": "object"
+      },
+      "EraInfo": {
+        "description": "Auction metadata for a given era.",
+        "type": "object"
+      },
+      "TransferV1": {
+        "description": "A version 1 transfer.",
+        "type": "object"
+      },
+      "Bid": {
+        "description": "An entry in a founding validator map representing a bid.",
+        "type": "object"
+      },
+      "BidKind": {
+        "description": "A bid variant.",
+        "type": "object"
+      },
+      "WithdrawPurse": {
+        "description": "A withdraw purse entry.",
+        "type": "object"
+      },
+      "UnbondingPurse": {
+        "description": "An unbonding purse entry.",
+        "type": "object"
+      }
+    }
+  }
