@@ -19,6 +19,10 @@ use tokio_stream::wrappers::BroadcastStream;
 
 pub mod utils;
 pub mod config;
+pub mod state;
+
+pub use state::{ActorStats, AppState, DashboardState, EventRecord};
+use state::StatsResponse;
 
 pub trait UiRouter {
     fn ui() -> Router<AppState>;
@@ -52,63 +56,6 @@ pub struct DashboardConfig<M: EventMapper, U: UiRouter, A: ApiRouter> {
     pub mapper: M,
     pub _ui: PhantomData<U>,
     pub _api: PhantomData<A>
-}
-
-// ── Shared state types ──────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventRecord {
-    pub timestamp: String,
-    pub actor: String,
-    pub actor_address: String,
-    pub action: String,
-    pub amount: u64,
-    pub target: String,
-    pub tx_hash: String,
-    pub status: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ActorStats {
-    pub actions: HashMap<String, u64>,
-    pub tx_count: u64,
-}
-
-#[derive(Serialize)]
-struct StatsResponse {
-    actors: HashMap<String, ActorStats>,
-    recent_events: Vec<EventRecord>,
-}
-
-pub struct DashboardState {
-    pub events: VecDeque<EventRecord>,
-    pub stats: HashMap<String, ActorStats>,
-}
-
-impl DashboardState {
-    fn new() -> Self {
-        Self {
-            events: VecDeque::with_capacity(50),
-            stats: HashMap::new(),
-        }
-    }
-
-    fn push_event(&mut self, record: EventRecord) {
-        let entry = self.stats.entry(record.actor.clone()).or_default();
-        entry.tx_count += 1;
-        *entry.actions.entry(record.action.clone()).or_default() += record.amount;
-        self.events.push_front(record);
-        self.events.truncate(50);
-    }
-}
-
-// ── Axum app state ───────────────────────────────────────────────────────────
-
-#[derive(Clone)]
-pub struct AppState {
-    broadcast_tx: broadcast::Sender<EventRecord>,
-    pub state: Arc<Mutex<DashboardState>>,
-    service_name: &'static str,
 }
 
 // ── Kafka event handler ──────────────────────────────────────────────────────
@@ -181,6 +128,11 @@ async fn sse_handler(
 }
 
 // ── Web server ───────────────────────────────────────────────────────────────
+// NOTE: `start_web_server` and `run_dashboard` are commented out for the duration
+// of the Task 4 state-split refactor. Task 10 rewrites both wholesale to use the
+// new `AppState` shape (with `config: Arc<DashboardConfig>` and
+// `service_name: Arc<str>`) and the config-driven max_events.
+/*
 async fn start_web_server<U: UiRouter, A: ApiRouter>(
     broadcast_tx: broadcast::Sender<EventRecord>,
     state: Arc<Mutex<DashboardState>>,
@@ -222,7 +174,7 @@ pub async fn run_dashboard<M: EventMapper, U: UiRouter, A: ApiRouter>(config: Da
         let tx = broadcast_tx.clone();
         let state = Arc::clone(&dashboard_state);
         let web_port = config.web_port;
-    
+
         let service_name = config.service_name;
         tokio::spawn(async move {
             if let Err(e) = start_web_server::<U, A>(tx, state, service_name, web_port).await {
@@ -259,3 +211,4 @@ pub async fn run_dashboard<M: EventMapper, U: UiRouter, A: ApiRouter>(config: Da
 
     Ok(())
 }
+*/
