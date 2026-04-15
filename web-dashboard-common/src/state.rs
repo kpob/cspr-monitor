@@ -48,7 +48,7 @@ impl DashboardState {
         let entry = self.stats.entry(record.actor.clone()).or_default();
         entry.tx_count += 1;
         entry.total_amount += record.amount;
-        *entry.actions.entry(record.action.clone()).or_default() += record.amount;
+        *entry.actions.entry(record.action.clone()).or_default() += 1;
         self.events.push_front(record);
         while self.events.len() > self.max_events {
             self.events.pop_back();
@@ -89,8 +89,8 @@ mod tests {
         let b = s.stats.get("binance").unwrap();
         assert_eq!(b.tx_count, 2);
         assert_eq!(b.total_amount, 140);
-        assert_eq!(b.actions["inflow"], 100);
-        assert_eq!(b.actions["outflow"], 40);
+        assert_eq!(b.actions["inflow"], 1);
+        assert_eq!(b.actions["outflow"], 1);
     }
 
     #[test]
