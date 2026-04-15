@@ -18,6 +18,7 @@ use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::BroadcastStream;
 
 pub mod utils;
+pub mod config;
 
 pub trait UiRouter {
     fn ui() -> Router<AppState>;
