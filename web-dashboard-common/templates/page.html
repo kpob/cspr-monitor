@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page.title }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  {% for css in custom_css %}<link rel="stylesheet" href="/static/css/custom/{{ css }}">{% endfor %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>:root { {{ theme_vars|safe }} }</style>
+</head>
+<body>
+  <div class="app">
+    <header class="hdr">
+      <div class="hdr-left">
+        <h1>{{ page.title }}</h1>
+        {% match page.subtitle %}{% when Some with (s) %}<span class="hdr-tag">{{ s }}</span>{% when None %}{% endmatch %}
+      </div>
+      <div class="conn">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connText">Connecting…</span>
+      </div>
+    </header>
+
+    <div class="grid" style="grid-template-columns: repeat({{ columns }}, 1fr);">
+      {% for w in page.widgets %}
+        <div class="widget widget-{{ w.kind_str }}"
+             data-widget="{{ w.kind_str }}"
+             data-widget-id="{{ w.id }}"
+             data-widget-config='{{ w.config_json|safe }}'
+             style="grid-row: {{ w.row }}; grid-column: {{ w.col }} / span {{ w.width }};">
+          {% include "widgets/_dispatch.html" %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script src="/static/js/utils.js"></script>
+  <script src="/static/js/sse.js"></script>
+  <script src="/static/js/widgets/stats_cards.js"></script>
+  <script src="/static/js/widgets/bar_chart.js"></script>
+  <script src="/static/js/widgets/pie_chart.js"></script>
+  <script src="/static/js/widgets/event_table.js"></script>
+  {% for js in custom_js %}<script src="/static/js/custom/{{ js }}"></script>{% endfor %}
+  <script src="/static/js/dashboard.js"></script>
+  <script>window.Dashboard.start("{{ bootstrap_url }}", "{{ events_url }}");</script>
+</body>
+</html>

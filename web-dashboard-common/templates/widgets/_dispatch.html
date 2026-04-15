@@ -1,0 +1,7 @@
+{% match w.kind %}
+  {% when WidgetKind::StatsCards %}{% include "widgets/stats_cards.html" %}
+  {% when WidgetKind::BarChart %}{% include "widgets/bar_chart.html" %}
+  {% when WidgetKind::PieChart %}{% include "widgets/pie_chart.html" %}
+  {% when WidgetKind::EventTable %}{% include "widgets/event_table.html" %}
+  {% when WidgetKind::Custom %}{% include "widgets/custom.html" %}
+{% endmatch %}
