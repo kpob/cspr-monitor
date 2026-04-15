@@ -21,6 +21,7 @@ pub mod utils;
 pub mod config;
 pub mod state;
 pub mod widgets;
+pub mod renderer;
 
 pub use state::{ActorStats, AppState, DashboardState, EventRecord};
 use state::StatsResponse;
