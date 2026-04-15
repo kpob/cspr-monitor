@@ -6,14 +6,13 @@ use axum::{
     response::Json,
 };
 use axum::response::sse::{Event, KeepAlive, Sse};
-use casper_event_consumer::{EnrichedEvent, EventConsumer, EventHandler};
+use casper_event_consumer::{EnrichedEvent, EventConsumer};
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use tower_http::services::ServeDir;
 use std::{
-    collections::{HashMap, VecDeque}, convert::Infallible, marker::PhantomData, sync::Arc
+    collections::{HashMap, VecDeque}, convert::Infallible, marker::PhantomData
 };
-use tokio::sync::{broadcast, Mutex};
 use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -23,6 +22,7 @@ pub mod state;
 pub mod widgets;
 pub mod renderer;
 pub mod filters;
+pub mod handler;
 
 pub use state::{ActorStats, AppState, DashboardState, EventRecord};
 use state::StatsResponse;
@@ -59,49 +59,6 @@ pub struct DashboardConfig<M: EventMapper, U: UiRouter, A: ApiRouter> {
     pub mapper: M,
     pub _ui: PhantomData<U>,
     pub _api: PhantomData<A>
-}
-
-// ── Kafka event handler ──────────────────────────────────────────────────────
-
-struct DashboardHandler<M: EventMapper> {
-    mapper: Arc<M>,
-    metric_name: &'static str,
-    broadcast_tx: broadcast::Sender<EventRecord>,
-    state: Arc<Mutex<DashboardState>>,
-}
-
-#[async_trait::async_trait]
-impl<M: EventMapper> EventHandler for DashboardHandler<M> {
-    async fn handle(&self, event: EnrichedEvent) -> Result<()> {
-        let Some(record) = self.mapper.map(&event) else {
-            return Ok(());
-        };
-
-        metrics::counter!(
-            self.metric_name,
-            "actor" => record.actor.clone(),
-            "action" => record.action.clone()
-        )
-        .increment(1);
-
-        tracing::info!(
-            "[{}] {} {} motes → {} (tx={}, status={})",
-            record.actor,
-            record.action.to_uppercase(),
-            record.amount,
-            record.target,
-            &record.tx_hash[..record.tx_hash.len().min(12)],
-            record.status,
-        );
-
-        {
-            let mut guard = self.state.lock().await;
-            guard.push_event(record.clone());
-        }
-
-        let _ = self.broadcast_tx.send(record);
-        Ok(())
-    }
 }
 
 // ── HTTP handlers ────────────────────────────────────────────────────────────
