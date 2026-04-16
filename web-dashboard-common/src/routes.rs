@@ -34,7 +34,7 @@ pub fn build_router(
 
     for page in &cfg.pages {
         let param = extract_param(&page.path);
-        let path_axum = to_axum_path(&page.path);
+        let path_axum = page.path.clone();
 
         let rendered = render_page(
             &cfg,
@@ -87,23 +87,6 @@ pub fn build_router(
     router
         .with_state(state)
         .nest_service("/static", ServeDir::new(static_dir))
-}
-
-fn to_axum_path(p: &str) -> String {
-    let mut out = String::with_capacity(p.len());
-    let mut chars = p.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '{' {
-            out.push(':');
-            for c2 in chars.by_ref() {
-                if c2 == '}' { break; }
-                out.push(c2);
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
 }
 
 fn collect_custom_assets<F>(cfg: &DashboardConfig, mut pick: F) -> Vec<String>
