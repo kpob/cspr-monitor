@@ -31,7 +31,7 @@ pub fn filter_by_address(state: &DashboardState, address: &str) -> AddressEvents
         let entry = targets.entry(other).or_default();
         entry.tx_count += 1;
         entry.total_amount += record.amount;
-        *entry.actions.entry(record.action.clone()).or_default() += 1;
+        *entry.actions.entry(record.action.clone()).or_default() += record.amount;
     }
 
     AddressEventsResponse { address: address.to_string(), events, targets }
