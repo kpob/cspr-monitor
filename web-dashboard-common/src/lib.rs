@@ -1,162 +1,86 @@
-use anyhow::Result;
-use axum::routing::get;
-use axum::{
-    Router,
-    extract::State,
-    response::Json,
-};
-use axum::response::sse::{Event, KeepAlive, Sse};
-use casper_event_consumer::{EnrichedEvent, EventConsumer};
-use futures_util::Stream;
-use serde::{Deserialize, Serialize};
-use tower_http::services::ServeDir;
-use std::{
-    collections::{HashMap, VecDeque}, convert::Infallible, marker::PhantomData
-};
-use tokio_stream::StreamExt as _;
-use tokio_stream::wrappers::BroadcastStream;
+use std::path::PathBuf;
+use std::sync::Arc;
 
-pub mod utils;
+use anyhow::Result;
+use casper_event_consumer::{EnrichedEvent, EventConsumer};
+use tokio::sync::{Mutex, broadcast};
+
 pub mod config;
-pub mod state;
-pub mod widgets;
-pub mod renderer;
 pub mod filters;
 pub mod handler;
+pub mod renderer;
+pub mod routes;
+pub mod state;
+pub mod utils;
+pub mod widgets;
 
+pub use config::{DashboardConfig, PageConfig, ServiceConfig, ThemeConfig, WidgetConfig, WidgetKind};
 pub use state::{ActorStats, AppState, DashboardState, EventRecord};
-use state::StatsResponse;
-
-pub trait UiRouter {
-    fn ui() -> Router<AppState>;
-}
-
-pub trait ApiRouter {
-    fn base_api() -> Router<AppState> {
-        Router::new()
-            .route("/api/stats", get(stats_handler))
-    }
-
-    fn api() -> Router<AppState> {
-        Self::base_api()
-    }
-}
-// ── Event mapper trait ──────────────────────────────────────────────────────
 
 pub trait EventMapper: Send + Sync + 'static {
     fn map(&self, event: &EnrichedEvent) -> Option<EventRecord>;
 }
 
-// ── Configuration ────────────────────────────────────────────────────────────
-
-pub struct DashboardConfig<M: EventMapper, U: UiRouter, A: ApiRouter> {
-    pub service_name: &'static str,
-    pub web_port: u16,
-    pub prometheus_port: u16,
-    pub metric_name: &'static str,
-    pub topics: Vec<&'static str>,
-    pub group_id: &'static str,
+pub struct Dashboard<M: EventMapper> {
+    pub config: DashboardConfig,
     pub mapper: M,
-    pub _ui: PhantomData<U>,
-    pub _api: PhantomData<A>
 }
 
-// ── HTTP handlers ────────────────────────────────────────────────────────────
-async fn health_handler(State(app): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"status": "ok", "service": app.service_name}))
+impl<M: EventMapper> Dashboard<M> {
+    pub fn from_toml(path: impl AsRef<std::path::Path>, mapper: M) -> Result<Self> {
+        let config = DashboardConfig::from_toml(path)?;
+        Ok(Self { config, mapper })
+    }
 }
 
-async fn stats_handler(State(app): State<AppState>) -> Json<StatsResponse> {
-    let guard = app.state.lock().await;
-    Json(StatsResponse {
-        actors: guard.stats.clone(),
-        recent_events: guard.events.iter().take(20).cloned().collect(),
-    })
-}
-
-async fn sse_handler(
-    State(app): State<AppState>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let rx = app.broadcast_tx.subscribe();
-    let stream = BroadcastStream::new(rx)
-        .filter_map(|result| result.ok())
-        .map(|record| {
-            let data = serde_json::to_string(&record).unwrap_or_default();
-            Ok::<Event, Infallible>(Event::default().data(data))
-        });
-    Sse::new(stream).keep_alive(KeepAlive::default())
-}
-
-// ── Web server ───────────────────────────────────────────────────────────────
-// NOTE: `start_web_server` and `run_dashboard` are commented out for the duration
-// of the Task 4 state-split refactor. Task 10 rewrites both wholesale to use the
-// new `AppState` shape (with `config: Arc<DashboardConfig>` and
-// `service_name: Arc<str>`) and the config-driven max_events.
-/*
-async fn start_web_server<U: UiRouter, A: ApiRouter>(
-    broadcast_tx: broadcast::Sender<EventRecord>,
-    state: Arc<Mutex<DashboardState>>,
-    service_name: &'static str,
-    web_port: u16,
-) -> Result<()> {
-    let app_state = AppState {
-        broadcast_tx,
-        state,
-        service_name,
-    };
-
-    let router = Router::new()
-        .route("/health", get(health_handler))
-        .route("/events", get(sse_handler))
-        .merge(U::ui())
-        .merge(A::api())
-        .with_state(app_state)
-        .nest_service("/static", ServeDir::new("/app/static"));
-
-    let addr = format!("0.0.0.0:{}", web_port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("Web dashboard listening on http://{}", addr);
-    axum::serve(listener, router).await?;
-    Ok(())
-}
-
-// ── Entry point ──────────────────────────────────────────────────────────────
-
-pub async fn run_dashboard<M: EventMapper, U: UiRouter, A: ApiRouter>(config: DashboardConfig<M, U, A>) -> Result<()> {
+pub async fn run_dashboard<M: EventMapper>(mut dashboard: Dashboard<M>) -> Result<()> {
     dotenv::dotenv().ok();
     casper_common::init_tracing();
-    tracing::info!("Starting {}", config.service_name);
-    casper_common::metrics::install_prometheus_exporter(config.prometheus_port);
+    tracing::info!("Starting {}", dashboard.config.service.name);
+    casper_common::metrics::install_prometheus_exporter(dashboard.config.service.prometheus_port);
 
-    let (broadcast_tx, _) = broadcast::channel::<EventRecord>(100);
-    let dashboard_state = Arc::new(Mutex::new(DashboardState::new()));
-    {
-        let tx = broadcast_tx.clone();
-        let state = Arc::clone(&dashboard_state);
-        let web_port = config.web_port;
+    let static_dir = resolve_static_dir(&mut dashboard.config);
+    let config = Arc::new(dashboard.config);
 
-        let service_name = config.service_name;
-        tokio::spawn(async move {
-            if let Err(e) = start_web_server::<U, A>(tx, state, service_name, web_port).await {
-                tracing::error!("Web server error: {}", e);
+    let (broadcast_tx, _) = broadcast::channel::<EventRecord>(config.service.broadcast_capacity);
+    let dashboard_state = Arc::new(Mutex::new(DashboardState::new(config.service.max_events)));
+
+    let app_state = AppState {
+        broadcast_tx: broadcast_tx.clone(),
+        state: Arc::clone(&dashboard_state),
+        service_name: Arc::from(config.service.name.as_str()),
+        config: Arc::clone(&config),
+    };
+
+    let router = routes::build_router(Arc::clone(&config), app_state, static_dir);
+
+    let web_port = config.service.web_port;
+    let service_name = config.service.name.clone();
+    tokio::spawn(async move {
+        let addr = format!("0.0.0.0:{}", web_port);
+        match tokio::net::TcpListener::bind(&addr).await {
+            Ok(listener) => {
+                tracing::info!("Web dashboard listening on http://{}", addr);
+                if let Err(e) = axum::serve(listener, router).await {
+                    tracing::error!("Web server error: {}", e);
+                }
             }
-        });
-    }
+            Err(e) => tracing::error!("Failed to bind {}: {}", addr, e),
+        }
+    });
 
     let consumer = EventConsumer::builder()
-        .brokers(
-            std::env::var("KAFKA_BOOTSTRAP").unwrap_or_else(|_| "localhost:9092".to_string()),
-        )
-        .topics(config.topics)
-        .group_id(config.group_id)
+        .brokers(std::env::var("KAFKA_BOOTSTRAP").unwrap_or_else(|_| "localhost:9092".to_string()))
+        .topics(config.service.topics.clone())
+        .group_id(&config.service.group_id)
         .build()?;
 
-    let service_name = config.service_name;
-    let mapper = Arc::new(config.mapper);
+    let mapper = Arc::new(dashboard.mapper);
+    let metric_name: Arc<str> = Arc::from(config.service.metric_name.as_str());
     tokio::select! {
-        result = consumer.subscribe(DashboardHandler {
+        result = consumer.subscribe(handler::DashboardHandler {
             mapper,
-            metric_name: config.metric_name,
+            metric_name,
             broadcast_tx,
             state: dashboard_state,
         }) => {
@@ -171,4 +95,13 @@ pub async fn run_dashboard<M: EventMapper, U: UiRouter, A: ApiRouter>(config: Da
 
     Ok(())
 }
-*/
+
+fn resolve_static_dir(config: &mut DashboardConfig) -> PathBuf {
+    if let Some(dir) = config.static_dir.take() {
+        return dir;
+    }
+    if std::path::Path::new("/app/static").exists() {
+        return PathBuf::from("/app/static");
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static")
+}
