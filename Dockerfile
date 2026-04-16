@@ -46,5 +46,17 @@ COPY --from=builder /app/target/release/casper-ingestion /usr/local/bin/ingestio
 COPY --from=builder /app/target/release/casper-event-router /usr/local/bin/event-router
 COPY --from=builder /app/target/release/casper-exchange-monitor /usr/local/bin/exchange-monitor
 COPY --from=builder /app/target/release/web-whale-activity /usr/local/bin/whale-activity
-COPY --from=builder /app/web-whale-activity/static /app/static
 COPY --from=builder /app/target/release/simulator /usr/local/bin/simulator
+
+# Framework static assets (design system + shared JS + widget JS)
+COPY --from=builder /app/web-dashboard-common/static /app/static
+
+# Framework templates are compiled into the binary by askama; no runtime copy needed.
+
+# Per-dashboard overrides (custom widgets + dashboard-specific JS/CSS) — overlay after framework
+COPY --from=builder /app/web-whale-activity/static /app/static
+COPY --from=builder /app/casper-exchange-monitor/static /app/static
+
+# Dashboard TOML configs — keep crate-relative paths so DASHBOARD_CONFIG=... can resolve them
+COPY --from=builder /app/casper-exchange-monitor/dashboard.toml /app/casper-exchange-monitor/dashboard.toml
+COPY --from=builder /app/web-whale-activity/dashboard.toml /app/web-whale-activity/dashboard.toml
