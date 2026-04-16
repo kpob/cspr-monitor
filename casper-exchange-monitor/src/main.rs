@@ -1,20 +1,5 @@
-use std::marker::PhantomData;
-
 use anyhow::Result;
-use axum::{Router, response::Html, routing::get};
-use web_dashboard_common::{ApiRouter, DashboardConfig, EventMapper, EventRecord, UiRouter};
-
-struct Routers;
-
-impl UiRouter for Routers {
-    fn ui() -> Router<web_dashboard_common::AppState> {
-        Router::new().route("/", get(async || Html(include_str!("dashboard.html"))))
-    }
-}
-
-impl ApiRouter for Routers {
-
-}
+use web_dashboard_common::{Dashboard, EventMapper, EventRecord, run_dashboard};
 
 struct ExchangeMapper {
     filter: Option<String>,
@@ -23,23 +8,12 @@ struct ExchangeMapper {
 impl EventMapper for ExchangeMapper {
     fn map(&self, event: &casper_event_consumer::EnrichedEvent) -> Option<EventRecord> {
         let exchange = event.app_data["exchange"].as_str().unwrap_or("Unknown").to_string();
-
         if let Some(f) = &self.filter {
-            if exchange != *f {
-                return None;
-            }
+            if exchange != *f { return None; }
         }
 
-        let direction = event.app_data["direction"]
-            .as_str()
-            .unwrap_or("unknown")
-            .to_string();
-
-        let counterparty = event.app_data["counterparty"]
-            .as_str()
-            .unwrap_or("unknown")
-            .to_string();
-
+        let direction = event.app_data["direction"].as_str().unwrap_or("unknown").to_string();
+        let counterparty = event.app_data["counterparty"].as_str().unwrap_or("unknown").to_string();
         let amount: u64 = event.app_data["amount"]
             .as_str()
             .and_then(|s| s.parse().ok())
@@ -60,18 +34,9 @@ impl EventMapper for ExchangeMapper {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let filter = std::env::var("EXCHANGE_FILTER").ok();
-
-    web_dashboard_common::run_dashboard(DashboardConfig {
-        service_name: "casper-exchange-monitor",
-        web_port: 8080,
-        prometheus_port: 9102,
-        metric_name: "casper_exchange_events_total",
-        topics: vec!["apps.exchanges"],
-        group_id: "exchange-monitor-v1",
-        mapper: ExchangeMapper { filter },
-        _api: PhantomData::<Routers>,
-        _ui: PhantomData::<Routers>
-    })
-    .await
+    let mapper = ExchangeMapper { filter: std::env::var("EXCHANGE_FILTER").ok() };
+    let config_path = std::env::var("DASHBOARD_CONFIG")
+        .unwrap_or_else(|_| "casper-exchange-monitor/dashboard.toml".to_string());
+    let dashboard = Dashboard::from_toml(&config_path, mapper)?;
+    run_dashboard(dashboard).await
 }
