@@ -1,0 +1,47 @@
+[service]
+name = "casper-exchange-monitor"
+web_port = 8080
+prometheus_port = 9102
+metric_name = "casper_exchange_events_total"
+topics = ["apps.exchanges"]
+group_id = "exchange-monitor-v1"
+max_events = 200
+
+[theme]
+accent = "#f59e0b"
+
+[theme.colors]
+inflow = "#22c55e"
+outflow = "#ef4444"
+
+[[pages]]
+path = "/"
+title = "Casper Exchange Monitor"
+subtitle = "Live inflow / outflow tracking"
+
+[[pages.widgets]]
+type = "bar_chart"
+id = "exchange-volume"
+row = 1
+col = 1
+title = "Inflow vs Outflow (CSPR)"
+datasets = [{ field = "action", values = ["inflow", "outflow"], group_by = "actor" }]
+
+[[pages.widgets]]
+type = "stats_cards"
+id = "exchange-stats"
+row = 1
+col = 2
+title = "Exchange Stats"
+group_by = "actor"
+metrics = ["tx_count", "total_amount"]
+
+[[pages.widgets]]
+type = "event_table"
+id = "event-log"
+row = 2
+col = 1
+width = 2
+title = "Live Event Log"
+columns = ["timestamp", "actor", "action", "amount", "target", "status", "tx_hash"]
+max_rows = 20

@@ -8,6 +8,8 @@ members = [
     "casper-exchange-monitor",
     "casper-ingestion",
     "casper-simulator",
+    "web-dashboard-common",
+    "web-whale-activity",
 ]
 
 [workspace.dependencies]
@@ -39,3 +41,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.16", default-features = false, features = ["http-listener"] }
 casper-types = { version = "6.1.0", features = ["json-schema", "std"] }
+tower-http = { version = "0.6", features = ["fs"] }
+toml = "0.8"
+askama = "0.12"

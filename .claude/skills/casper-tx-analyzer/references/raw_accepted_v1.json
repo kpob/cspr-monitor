@@ -1,0 +1,259 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Deploy",
+    "description": "A signed smart contract.",
+    "type": "object",
+    "required": ["hash", "header", "payment", "session", "approvals"],
+    "additionalProperties": false,
+    "properties": {
+      "hash": {
+        "description": "Hex-encoded deploy hash.",
+        "$ref": "#/$defs/DeployHash"
+      },
+      "header": {
+        "$ref": "#/$defs/DeployHeader"
+      },
+      "payment": {
+        "$ref": "#/$defs/ExecutableDeployItem"
+      },
+      "session": {
+        "$ref": "#/$defs/ExecutableDeployItem"
+      },
+      "approvals": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Approval"
+        },
+        "uniqueItems": true
+      }
+    },
+    "$defs": {
+      "DeployHash": {
+        "description": "Hex-encoded deploy hash.",
+        "type": "string"
+      },
+      "DeployHeader": {
+        "description": "The header portion of a Deploy.",
+        "type": "object",
+        "required": ["account", "timestamp", "ttl", "gas_price", "body_hash", "dependencies", "chain_name"],
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "description": "Hex-encoded public key (with algorithm prefix).",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Timestamp formatted as an ISO 8601 string.",
+            "type": "string"
+          },
+          "ttl": {
+            "description": "Human-readable duration (e.g. '1h', '30m').",
+            "type": "string"
+          },
+          "gas_price": {
+            "description": "Sender's gas price tolerance for block inclusion.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "body_hash": {
+            "description": "Hex-encoded hash of the body (payment + session).",
+            "type": "string"
+          },
+          "dependencies": {
+            "description": "List of deploy hashes that must be executed before this deploy.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/DeployHash"
+            }
+          },
+          "chain_name": {
+            "description": "Name of the chain the deploy targets.",
+            "type": "string"
+          }
+        }
+      },
+      "ExecutableDeployItem": {
+        "description": "The executable component of a Deploy.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["ModuleBytes"],
+            "additionalProperties": false,
+            "properties": {
+              "ModuleBytes": {
+                "type": "object",
+                "required": ["module_bytes", "args"],
+                "additionalProperties": false,
+                "properties": {
+                  "module_bytes": {
+                    "description": "Hex-encoded raw Wasm bytes.",
+                    "type": "string"
+                  },
+                  "args": {
+                    "$ref": "#/$defs/RuntimeArgs"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["StoredContractByHash"],
+            "additionalProperties": false,
+            "properties": {
+              "StoredContractByHash": {
+                "type": "object",
+                "required": ["hash", "entry_point", "args"],
+                "additionalProperties": false,
+                "properties": {
+                  "hash": {
+                    "description": "Hex-encoded contract hash.",
+                    "type": "string"
+                  },
+                  "entry_point": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "$ref": "#/$defs/RuntimeArgs"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["StoredContractByName"],
+            "additionalProperties": false,
+            "properties": {
+              "StoredContractByName": {
+                "type": "object",
+                "required": ["name", "entry_point", "args"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "entry_point": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "$ref": "#/$defs/RuntimeArgs"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["StoredVersionedContractByHash"],
+            "additionalProperties": false,
+            "properties": {
+              "StoredVersionedContractByHash": {
+                "type": "object",
+                "required": ["hash", "entry_point", "args"],
+                "additionalProperties": false,
+                "properties": {
+                  "hash": {
+                    "description": "Hex-encoded contract package hash.",
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": ["integer", "null"],
+                    "minimum": 0
+                  },
+                  "entry_point": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "$ref": "#/$defs/RuntimeArgs"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["StoredVersionedContractByName"],
+            "additionalProperties": false,
+            "properties": {
+              "StoredVersionedContractByName": {
+                "type": "object",
+                "required": ["name", "entry_point", "args"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": ["integer", "null"],
+                    "minimum": 0
+                  },
+                  "entry_point": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "$ref": "#/$defs/RuntimeArgs"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Transfer"],
+            "additionalProperties": false,
+            "properties": {
+              "Transfer": {
+                "type": "object",
+                "required": ["args"],
+                "additionalProperties": false,
+                "properties": {
+                  "args": {
+                    "$ref": "#/$defs/RuntimeArgs"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RuntimeArgs": {
+        "description": "Named arguments to a contract or session entry point, serialized as an array of [name, CLValue] pairs.",
+        "type": "array",
+        "items": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": [
+            { "type": "string", "description": "Argument name" },
+            {
+              "type": "object",
+              "description": "A CL value with its type tag.",
+              "required": ["cl_type", "bytes", "parsed"],
+              "properties": {
+                "cl_type": { "description": "The CL type of the value." },
+                "bytes": { "type": "string", "description": "Hex-encoded serialized bytes." },
+                "parsed": { "description": "JSON representation of the parsed value (may be null)." }
+              }
+            }
+          ]
+        }
+      },
+      "Approval": {
+        "description": "A struct containing a signature of a transaction hash and the public key of the signer.",
+        "type": "object",
+        "required": ["signer", "signature"],
+        "additionalProperties": false,
+        "properties": {
+          "signer": {
+            "description": "Hex-encoded public key (with algorithm prefix).",
+            "type": "string"
+          },
+          "signature": {
+            "description": "Hex-encoded signature (with algorithm prefix).",
+            "type": "string"
+          }
+        }
+      }
+    }
+}

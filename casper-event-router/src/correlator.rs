@@ -84,7 +84,7 @@ impl TransactionCorrelator {
             accepted_at: event.received_at,
             raw_accepted: event.payload.clone(),
             contract_hash,
-            entry_point,
+            entry_point: entry_point.map(|e| e.to_lowercase()),
             args,
         };
 

@@ -16,11 +16,14 @@ COPY casper-event-router/ casper-event-router/
 COPY casper-exchange-monitor/ casper-exchange-monitor/
 COPY casper-ingestion/ casper-ingestion/
 COPY casper-simulator/ casper-simulator/
+COPY web-dashboard-common/ web-dashboard-common/
+COPY web-whale-activity/ web-whale-activity/
 
 RUN cargo +nightly build --release \
     --bin casper-ingestion \
     --bin casper-event-router \
     --bin casper-exchange-monitor \
+    --bin web-whale-activity \
     --bin simulator
 
 FROM debian:bookworm-slim
@@ -42,4 +45,18 @@ COPY casper-event-router/config/ config/
 COPY --from=builder /app/target/release/casper-ingestion /usr/local/bin/ingestion
 COPY --from=builder /app/target/release/casper-event-router /usr/local/bin/event-router
 COPY --from=builder /app/target/release/casper-exchange-monitor /usr/local/bin/exchange-monitor
+COPY --from=builder /app/target/release/web-whale-activity /usr/local/bin/whale-activity
 COPY --from=builder /app/target/release/simulator /usr/local/bin/simulator
+
+# Framework static assets (design system + shared JS + widget JS)
+COPY --from=builder /app/web-dashboard-common/static /app/static
+
+# Framework templates are compiled into the binary by askama; no runtime copy needed.
+
+# Per-dashboard overrides (custom widgets + dashboard-specific JS/CSS) — overlay after framework
+COPY --from=builder /app/web-whale-activity/static /app/static
+COPY --from=builder /app/casper-exchange-monitor/static /app/static
+
+# Dashboard TOML configs — keep crate-relative paths so DASHBOARD_CONFIG=... can resolve them
+COPY --from=builder /app/casper-exchange-monitor/dashboard.toml /app/casper-exchange-monitor/dashboard.toml
+COPY --from=builder /app/web-whale-activity/dashboard.toml /app/web-whale-activity/dashboard.toml

@@ -1,0 +1,62 @@
+[service]
+name = "web-whale-activity"
+web_port = 8081
+prometheus_port = 9103
+metric_name = "casper_whale_events_total"
+topics = ["apps.contracts", "apps.native"]
+group_id = "whale-activity-v1"
+max_events = 200
+
+[[pages]]
+path = "/"
+title = "Whale Activity"
+subtitle = ">= 100k CSPR"
+
+[[pages.widgets]]
+type = "bar_chart"
+id = "timeline"
+row = 1
+col = 1
+width = 2
+title = "Transaction timeline"
+
+[[pages.widgets]]
+type = "pie_chart"
+id = "breakdown"
+row = 2
+col = 1
+title = "Volume by action"
+
+[[pages.widgets]]
+type = "event_table"
+id = "stream"
+row = 2
+col = 2
+title = "Recent whale movements"
+columns = ["timestamp", "actor", "action", "amount", "target", "tx_hash"]
+max_rows = 30
+
+[[pages]]
+path = "/account/{address}"
+title = "Account"
+
+[[pages.widgets]]
+type = "custom"
+id = "account-graph"
+widget_key = "account_graph"
+row = 1
+col = 1
+width = 2
+title = "Interaction Graph"
+js = "account-graph.js"
+css = "account-graph.css"
+
+[[pages.widgets]]
+type = "event_table"
+id = "account-events"
+row = 2
+col = 1
+width = 2
+title = "Transactions"
+columns = ["timestamp", "action", "amount", "target", "tx_hash"]
+max_rows = 50

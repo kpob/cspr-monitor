@@ -1,0 +1,22 @@
+[package]
+name = "web-dashboard-common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+casper-common = { path = "../casper-common" }
+casper-event-consumer = { path = "../casper-event-consumer" }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+dotenv = { workspace = true }
+futures-util = { workspace = true }
+metrics = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tracing = { workspace = true }
+tower-http = { workspace = true }
+toml = { workspace = true }
+askama = { workspace = true }
