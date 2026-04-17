@@ -39,13 +39,13 @@
   </div>
 
   <script src="/static/js/utils.js"></script>
+  <script src="/static/js/dashboard.js"></script>
   <script src="/static/js/sse.js"></script>
   <script src="/static/js/widgets/stats_cards.js"></script>
   <script src="/static/js/widgets/bar_chart.js"></script>
   <script src="/static/js/widgets/pie_chart.js"></script>
   <script src="/static/js/widgets/event_table.js"></script>
   {% for js in custom_js %}<script src="/static/js/custom/{{ js }}"></script>{% endfor %}
-  <script src="/static/js/dashboard.js"></script>
   <script>window.Dashboard.start("{{ bootstrap_url }}", "{{ events_url }}");</script>
 </body>
 </html>

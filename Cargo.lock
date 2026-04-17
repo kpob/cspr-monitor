@@ -466,7 +466,6 @@ name = "casper-exchange-monitor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum",
  "casper-event-consumer",
  "tokio",
  "web-dashboard-common",
@@ -4367,9 +4366,7 @@ name = "web-whale-activity"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum",
  "casper-event-consumer",
- "serde",
  "serde_json",
  "tokio",
  "web-dashboard-common",
